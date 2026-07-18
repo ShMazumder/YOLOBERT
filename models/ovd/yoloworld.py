@@ -6,6 +6,7 @@ weights: 'yolov8s-world.pt' / 'yolov8x-worldv2.pt' (auto-downloaded).
 Ultralytics YOLO-World: set_classes(names) defines the open vocabulary, then
 predict() returns boxes in xyxy pixel coords with class indices into `names`.
 """
+import torch
 from .base import OVDAdapter, register_adapter
 
 
@@ -13,7 +14,14 @@ from .base import OVDAdapter, register_adapter
 class YoloWorldAdapter(OVDAdapter):
     def __init__(self, weights="yolov8s-world.pt", device=None, imgsz=800):
         from ultralytics import YOLOWorld
+        
+        # Automatically select the GPU if available and no device is specified
+        if device is None:
+            device = "cuda:0" if torch.cuda.is_available() else "cpu"
+            
         self.model = YOLOWorld(weights)
+        self.model.to(device)  # Explicitly force entire model framework to the same device
+        
         self.device = device
         self.imgsz = imgsz
         self._vocab = None
@@ -23,6 +31,7 @@ class YoloWorldAdapter(OVDAdapter):
         if class_names != self._vocab:
             self.model.set_classes(list(class_names))
             self._vocab = list(class_names)
+            
         res = self.model.predict(image_path, imgsz=self.imgsz, conf=score_thresh,
                                  device=self.device, verbose=False)[0]
         out = []
