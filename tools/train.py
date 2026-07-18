@@ -26,6 +26,9 @@ def load_config(path, opts):
     with open(path) as f:
         cfg = yaml.safe_load(f) or {}
     for kv in opts or []:               # CLI overrides: key=value
+        if "=" not in kv:               # stray token (e.g. shell-leaked comment)
+            print(f"[warn] ignoring malformed --opts token: {kv!r} (need key=value)")
+            continue
         k, v = kv.split("=", 1)
         cfg[k] = yaml.safe_load(v)      # parse int/float/bool/str
     return cfg
