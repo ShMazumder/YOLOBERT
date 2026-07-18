@@ -132,8 +132,9 @@ class FCOS(nn.Module):
     @staticmethod
     def _locations(feat, stride, device):
         _, _, h, w = feat.shape
-        sx = torch.arange(w, device=device) * stride + stride // 2
-        sy = torch.arange(h, device=device) * stride + stride // 2
+        # float grid: pixel-center coords feed float box math + centerness sqrt
+        sx = torch.arange(w, device=device, dtype=torch.float32) * stride + stride / 2
+        sy = torch.arange(h, device=device, dtype=torch.float32) * stride + stride / 2
         yy, xx = torch.meshgrid(sy, sx, indexing="ij")
         return torch.stack([xx.reshape(-1), yy.reshape(-1)], 1)     # (HW,2)
 
