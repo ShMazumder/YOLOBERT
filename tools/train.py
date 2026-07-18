@@ -132,28 +132,48 @@ def train_one_epoch(model, loader, optimizer, criterion, device, epoch, writer):
         optimizer.zero_grad()
         out = model(x, y) if _wants_targets(model) else model(x)
         if isinstance(out, dict):           # detection: model returns loss dict
-            loss = sum(out.values())
-            log_parts = {k: v.item() for k, v in out.items()}
+            # .mean() collapses DataParallel's per-GPU stacked losses; scalar-safe.
+            reduced = {k: (v.mean() if v.dim() > 0 else v) for k, v in out.items()}
+            loss = sum(reduced.values())
+            log_parts = {k: v.item() for k, v in reduced.items()}
         else:                                # classification: external criterion
             loss = criterion(out, y)
             log_parts = {"loss": loss.item()}
         loss.backward()
         optimizer.step()
         running += loss.item()
-        if i % 20 == 0:
+        if writer is not None and i % 20 == 0:
             step = epoch * len(loader) + i
             for k, v in log_parts.items():
                 writer.add_scalar(f"train/{k}", v, step)
     return running / max(len(loader), 1)
 
 
+def _unwrap(model):
+    """Underlying module, past DataParallel / DistributedDataParallel."""
+    return model.module if hasattr(model, "module") else model
+
+
 def _wants_targets(model):
     """True if model.forward accepts a targets arg (detection-style)."""
     import inspect
     try:
-        return "targets" in inspect.signature(model.forward).parameters
+        return "targets" in inspect.signature(_unwrap(model).forward).parameters
     except (ValueError, TypeError):
         return False
+
+
+# ------------------------------------------------------------------ distributed
+def _dist_env():
+    """Read torchrun-provided env. Returns (is_ddp, rank, local_rank, world_size)."""
+    if "RANK" in os.environ and "WORLD_SIZE" in os.environ:
+        return (True, int(os.environ["RANK"]),
+                int(os.environ.get("LOCAL_RANK", 0)), int(os.environ["WORLD_SIZE"]))
+    return (False, 0, 0, 1)
+
+
+def is_main(rank):
+    return rank == 0
 
 
 @torch.no_grad()
@@ -163,18 +183,19 @@ def evaluate(model, loader, device, cfg=None):
     For coco/semseg you must adapt the model output -> metric.update() call
     below to your prediction format (see metrics.py docstrings).
     """
-    model.eval()
+    net = _unwrap(model)            # eval single-GPU; skip DP/DDP output gather
+    net.eval()
     cfg = cfg or {}
     if cfg.get("metric"):
         from metrics import build_metric
         m = build_metric(cfg)
-        wants = _wants_targets(model)
+        wants = _wants_targets(net)
         # map contiguous label ids back to original dataset category ids (COCO sparse)
         label2cat = getattr(getattr(loader, "dataset", None), "label2cat", None)
         for batch in loader:
             x, y = _to_device(batch, device)
             # detection models need targets in eval for real image_id/orig_size
-            out = model(x, y) if wants else model(x)
+            out = net(x, y) if wants else net(x)
             if label2cat and isinstance(out, list):
                 for d in out:
                     d["category_id"] = label2cat.get(d["category_id"], d["category_id"])
@@ -184,7 +205,7 @@ def evaluate(model, loader, device, cfg=None):
     correct = total = 0
     for x, y in loader:
         x, y = x.to(device), y.to(device)
-        pred = model(x).argmax(1)
+        pred = net(x).argmax(1)
         correct += (pred == y).sum().item()
         total += y.numel()
     return {"top1": 100.0 * correct / max(total, 1)}
@@ -199,53 +220,100 @@ def main():
     args = ap.parse_args()
 
     cfg = load_config(args.config, args.opts)
-    set_seed(cfg.get("seed", 42))
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    # --- parallelism switch: cfg['parallel'] = none | dp | ddp ---
+    # none : single GPU.
+    # dp   : nn.DataParallel — works with plain `python tools/train.py` (Kaggle 2xT4).
+    # ddp  : DistributedDataParallel — MUST be launched via torchrun, e.g.
+    #        torchrun --nproc_per_node=2 tools/train.py --config <cfg> --opts parallel=ddp
+    mode = str(cfg.get("parallel", "none")).lower()
+    env_ddp, rank, local_rank, world = _dist_env()
+    if mode == "ddp" and not env_ddp:
+        print("[warn] parallel=ddp but not launched via torchrun; falling back to dp")
+        mode = "dp"
+    use_ddp = mode == "ddp" and env_ddp
+
+    if use_ddp:
+        import torch.distributed as dist
+        dist.init_process_group(backend="nccl")
+        torch.cuda.set_device(local_rank)
+        device = f"cuda:{local_rank}"
+        cfg["_distributed"] = True          # factory -> DistributedSampler
+    else:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+    main_proc = is_main(rank)
+
+    set_seed(cfg.get("seed", 42) + rank)     # decorrelate per-rank augmentation
 
     work_dir = Path(cfg.get("work_dir", "work_dirs/exp"))
-    work_dir.mkdir(parents=True, exist_ok=True)
-    with open(work_dir / "config_used.yaml", "w") as f:
-        yaml.safe_dump(cfg, f)          # snapshot exact config with results
-    writer = SummaryWriter(work_dir / "tb")
+    if main_proc:
+        work_dir.mkdir(parents=True, exist_ok=True)
+        with open(work_dir / "config_used.yaml", "w") as f:
+            yaml.safe_dump({k: v for k, v in cfg.items() if not k.startswith("_")}, f)
+    writer = SummaryWriter(work_dir / "tb") if main_proc else None
 
     train_loader, val_loader = build_dataloaders(cfg)
     model = build_model(cfg).to(device)
-    optimizer = torch.optim.AdamW(model.parameters(),
+
+    if use_ddp:
+        from torch.nn.parallel import DistributedDataParallel as DDP
+        model = DDP(model, device_ids=[local_rank], output_device=local_rank,
+                    find_unused_parameters=False)
+    elif mode == "dp" and torch.cuda.device_count() > 1:
+        model = torch.nn.DataParallel(model)
+        if main_proc:
+            print(f"DataParallel across {torch.cuda.device_count()} GPUs")
+
+    optimizer = torch.optim.AdamW(_unwrap(model).parameters(),
                                   lr=cfg.get("lr", 1e-3),
                                   weight_decay=cfg.get("weight_decay", 1e-4))
-    criterion = torch.nn.CrossEntropyLoss()   # TODO: your loss
+    criterion = torch.nn.CrossEntropyLoss()   # TODO: your loss (classification path)
 
     start_epoch, best = 0, -1.0
     if args.resume and os.path.isfile(args.resume):
         ck = torch.load(args.resume, map_location=device)
-        model.load_state_dict(ck["model"])
+        _unwrap(model).load_state_dict(ck["model"])
         optimizer.load_state_dict(ck["optimizer"])
         start_epoch = ck["epoch"] + 1
         best = ck.get("best", -1.0)
-        print(f"resumed from {args.resume} @ epoch {start_epoch}")
+        if main_proc:
+            print(f"resumed from {args.resume} @ epoch {start_epoch}")
 
     epochs = cfg.get("epochs", 20)
     for epoch in range(start_epoch, epochs):
         t0 = time.time()
+        if use_ddp and hasattr(train_loader.sampler, "set_epoch"):
+            train_loader.sampler.set_epoch(epoch)   # reshuffle shards each epoch
         loss = train_one_epoch(model, train_loader, optimizer, criterion, device, epoch, writer)
-        metrics = evaluate(model, val_loader, device, cfg)
-        primary = metrics[cfg.get("primary_metric", "top1")]
-        for k, v in metrics.items():
-            writer.add_scalar(f"val/{k}", v, epoch)
-        print(f"epoch {epoch:3d} | loss {loss:.4f} | "
-              + " ".join(f"{k} {v:.2f}" for k, v in metrics.items())
-              + f" | {time.time()-t0:.1f}s")
 
-        ck = {"epoch": epoch, "model": model.state_dict(),
-              "optimizer": optimizer.state_dict(), "best": best, "cfg": cfg}
-        torch.save(ck, work_dir / "last.pth")
-        if primary > best:
-            best = primary
-            torch.save(ck, work_dir / "best.pth")
-            print(f"  new best {cfg.get('primary_metric','top1')}={best:.2f}")
+        if main_proc:                        # only rank 0 evals + saves + logs
+            metrics = evaluate(model, val_loader, device, cfg)
+            primary = metrics[cfg.get("primary_metric", "top1")]
+            for k, v in metrics.items():
+                writer.add_scalar(f"val/{k}", v, epoch)
+            print(f"epoch {epoch:3d} | loss {loss:.4f} | "
+                  + " ".join(f"{k} {v:.2f}" for k, v in metrics.items())
+                  + f" | {time.time()-t0:.1f}s")
 
-    writer.close()
-    print(f"done. best={best:.2f}. logs -> {work_dir}")
+            ck = {"epoch": epoch, "model": _unwrap(model).state_dict(),
+                  "optimizer": optimizer.state_dict(), "best": best, "cfg": cfg}
+            torch.save(ck, work_dir / "last.pth")
+            if primary > best:
+                best = primary
+                torch.save(ck, work_dir / "best.pth")
+                print(f"  new best {cfg.get('primary_metric','top1')}={best:.2f}")
+
+        if use_ddp:                          # resync: rank0 eval takes longer
+            import torch.distributed as dist
+            dist.barrier()
+
+    if writer is not None:
+        writer.close()
+    if use_ddp:
+        import torch.distributed as dist
+        dist.destroy_process_group()
+    if main_proc:
+        print(f"done. best={best:.2f}. logs -> {work_dir}")
 
 
 if __name__ == "__main__":

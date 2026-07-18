@@ -19,7 +19,13 @@ def detection_collate(batch):
 
 
 def _loader(ds, cfg, shuffle, collate=None):
-    return DataLoader(ds, batch_size=cfg.get("batch_size", 16), shuffle=shuffle,
+    sampler = None
+    if cfg.get("_distributed"):                       # DDP: one shard per rank
+        from torch.utils.data.distributed import DistributedSampler
+        sampler = DistributedSampler(ds, shuffle=shuffle)
+    return DataLoader(ds, batch_size=cfg.get("batch_size", 16),
+                      shuffle=(shuffle and sampler is None),
+                      sampler=sampler,
                       num_workers=cfg.get("workers", 4), pin_memory=True,
                       collate_fn=collate)
 
