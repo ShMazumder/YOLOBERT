@@ -27,10 +27,12 @@ jobs:
           python-version: "3.10"
       - name: Install deps (CPU torch)
         run: |
-          pip install torch --index-url https://download.pytorch.org/whl/cpu
-          pip install -r requirements.txt
+          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements.txt pytest
       - name: Smoke train (1 epoch, dummy data)
         run: python tools/train.py --config configs/base.yaml --opts epochs=1
+      - name: FCOS unit tests
+        run: pytest tests/ -q
 
   paper:
     runs-on: ubuntu-latest
