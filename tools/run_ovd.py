@@ -42,7 +42,7 @@ def main():
     cats = coco.loadCats(cat_ids)
     names = [c["name"] for c in cats]
     name2catid = {c["name"]: c["id"] for c in cats}
-    agnostic_catid = cat_ids                     # arbitrary; eval is class-agnostic here
+    agnostic_catid = cat_ids[0]                  # FIXED: Must be a single integer ID, not a list!
 
     img_ids = sorted(coco.getImgs().keys()) if hasattr(coco, "getImgs") else sorted(coco.imgs.keys())
     if args.limit:
