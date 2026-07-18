@@ -70,7 +70,7 @@ def main():
 
     from pycocotools.coco import COCO
     from models.ovd import build_adapter
-    from tools.ovd_diagnose import diagnose
+    from tools.ovd_diagnose import diagnose, ioa_f1
 
     coco = COCO(args.ann)
     cat_ids = sorted(coco.getCatIds())
@@ -111,6 +111,9 @@ def main():
             fp = diagnose(args.ann, res["global"], res["oracle"],
                           results_agnostic=agn, fixed_score_thresh=args.fixed_thresh)
             fp["model"] = name
+            # Paper-1-style IoA-F1 anchor (global mode) for validation
+            fp["IoA_F1"] = ioa_f1(args.ann, res["global"], ioa_thr=0.7,
+                                  score_thr=args.fixed_thresh)["F1"]
             json.dump(fp, open(mdir / "fingerprint.json", "w"), indent=2)
             rows.append(fp)
             print(f"  -> {name}: L={fp['L']:.3f} S_norm={fp['S_norm']:.3f} "
@@ -122,7 +125,7 @@ def main():
     # --- consolidated table ---
     if rows:
         keys = ["model", "L", "S", "S_norm", "C_ece", "C_thr",
-                "AP_global", "AP_oracle", "AR_agnostic", "L_source"]
+                "AP_global", "AP_oracle", "AR_agnostic", "IoA_F1", "L_source"]
         with open(out_dir / "fingerprints.csv", "w", newline="") as f:
             w = csv.DictWriter(f, fieldnames=keys, extrasaction="ignore")
             w.writeheader()
