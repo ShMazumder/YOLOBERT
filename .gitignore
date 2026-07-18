@@ -22,8 +22,9 @@ mlruns/
 events.out.tfevents.*
 
 # --- datasets / large data (keep code, not data) ---
+# NOTE: do NOT ignore datasets/ — that is our loader PACKAGE (code).
+# Put actual image/annotation data under data/ instead.
 data/
-datasets/
 *.zip
 *.h5
 *.hdf5
