@@ -63,10 +63,11 @@ class RandomHFlip:
 
 
 class ToTensor:
-    """PIL -> float tensor CxHxW in [0,1]."""
+    """PIL -> float tensor CxHxW in [0,1]. numpy path (fast; avoids per-pixel loop)."""
     def __call__(self, img, target):
-        t = torch.as_tensor(list(img.getdata()), dtype=torch.float32)
-        t = t.view(img.size[1], img.size[0], len(img.getbands())).permute(2, 0, 1)
+        import numpy as np
+        arr = np.asarray(img, dtype=np.float32)          # HxWxC
+        t = torch.from_numpy(arr).permute(2, 0, 1).contiguous()
         return t / 255.0, target
 
 

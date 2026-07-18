@@ -101,8 +101,10 @@ class FCOSHead(nn.Module):
             r = self.reg_tower(feat)
             cls_out.append(self.cls_logits(c))
             ctr_out.append(self.centerness(c))
-            # relu so ltrb distances are non-negative, scaled per level
-            reg_out.append(F.relu(self.bbox_reg(r) * self.scales[lvl]))
+            # predict in stride units (network outputs O(10)), then * stride -> pixels.
+            # relu keeps ltrb non-negative. train + infer both read pixel distances.
+            reg = F.relu(self.bbox_reg(r) * self.scales[lvl]) * FPN_STRIDES[lvl]
+            reg_out.append(reg)
         return cls_out, reg_out, ctr_out
 
 
