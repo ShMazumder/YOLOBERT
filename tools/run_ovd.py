@@ -28,10 +28,13 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--limit", type=int, default=0, help="cap #images (debug)")
     ap.add_argument("--fixed_thresh", type=float, default=0.25)
+    ap.add_argument("--imgz", type=int, default=800, help="image size for model inference")
+    ap.add_argument("--device", default=None, help="cuda device or cpu")
     args = ap.parse_args()
 
     from pycocotools.coco import COCO
-    from models.ovd import build_adapter
+    from models.ovd.base import ADAPTERS, build_adapter
+    from models.ovd import yoloworld  # Force parsing of registration decorators
     from tools.ovd_diagnose import diagnose
 
     coco = COCO(args.ann)
@@ -39,13 +42,14 @@ def main():
     cats = coco.loadCats(cat_ids)
     names = [c["name"] for c in cats]
     name2catid = {c["name"]: c["id"] for c in cats}
-    agnostic_catid = cat_ids[0]                     # arbitrary; eval is class-agnostic here
+    agnostic_catid = cat_ids                     # arbitrary; eval is class-agnostic here
 
     img_ids = sorted(coco.getImgs().keys()) if hasattr(coco, "getImgs") else sorted(coco.imgs.keys())
     if args.limit:
         img_ids = img_ids[:args.limit]
 
-    model = build_adapter(args.model, weights=args.weights)
+    print(f"Verified registry targets: {list(ADAPTERS.keys())}")
+    model = build_adapter(args.model, weights=args.weights, device=args.device, imgsz=args.imgz)
 
     res = {"global": [], "oracle": [], "agnostic": []}
     for k, img_id in enumerate(img_ids):
