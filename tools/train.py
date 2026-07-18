@@ -44,26 +44,44 @@ def set_seed(seed):
 
 
 # ------------------------------------------------------------------ data
-def build_dataloaders(cfg):
-    """Dispatch via the datasets/ package (dummy|coco|yolo|voc).
+def _dummy_loaders(cfg):
+    from torch.utils.data import DataLoader, TensorDataset
+    n, d = cfg.get("_dummy_n", 256), cfg.get("_dummy_dim", 32)
+    ds = TensorDataset(torch.randn(n, d),
+                       torch.randint(0, cfg.get("num_classes", 10), (n,)))
+    bs = cfg.get("batch_size", 32)
+    return (DataLoader(ds, batch_size=bs, shuffle=True, num_workers=cfg.get("workers", 2)),
+            DataLoader(ds, batch_size=bs, shuffle=False, num_workers=cfg.get("workers", 2)))
 
-    Falls back to an inline dummy loader if the package import fails, so the
-    scaffold runs standalone.
+
+def build_dataloaders(cfg):
+    """Dispatch via the local datasets/ package (dummy|coco|yolo|voc).
+
+    Import errors fall back to a dummy loader (scaffold still runs). Real dataset
+    construction errors (bad path, missing anns) are raised — never silently
+    masked by the dummy path.
     """
     try:
+        import importlib
         import sys
-        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-        from datasets import build_dataloaders as _build
-        return _build(cfg)
-    except Exception as e:  # pragma: no cover - fallback path
-        print(f"[warn] datasets package unavailable ({e}); inline dummy loader")
-        from torch.utils.data import DataLoader, TensorDataset
-        n, d = cfg.get("_dummy_n", 256), cfg.get("_dummy_dim", 32)
-        ds = TensorDataset(torch.randn(n, d),
-                           torch.randint(0, cfg.get("num_classes", 10), (n,)))
-        bs = cfg.get("batch_size", 32)
-        return (DataLoader(ds, batch_size=bs, shuffle=True, num_workers=cfg.get("workers", 2)),
-                DataLoader(ds, batch_size=bs, shuffle=False, num_workers=cfg.get("workers", 2)))
+        repo = str(Path(__file__).resolve().parent.parent)
+        if sys.path[0] != repo:
+            sys.path.insert(0, repo)
+        # Evict a shadowing site-packages 'datasets' (e.g. HuggingFace, preinstalled
+        # on Kaggle/Colab) so our local package resolves from repo root.
+        cached = sys.modules.get("datasets")
+        cached_file = getattr(cached, "__file__", "") or ""
+        if cached is not None and repo not in cached_file:
+            for k in [m for m in sys.modules if m == "datasets" or m.startswith("datasets.")]:
+                del sys.modules[k]
+        datasets_pkg = importlib.import_module("datasets")
+        if not hasattr(datasets_pkg, "build_dataloaders"):
+            raise ImportError(f"resolved wrong 'datasets' at {datasets_pkg.__file__}")
+    except Exception as e:
+        print(f"[warn] local datasets package unavailable ({e}); inline dummy loader")
+        return _dummy_loaders(cfg)
+    # import ok -> let real data errors propagate loudly
+    return datasets_pkg.build_dataloaders(cfg)
 
 
 # ------------------------------------------------------------------ model
