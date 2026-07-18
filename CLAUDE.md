@@ -6,12 +6,13 @@
 
 ## Project
 
-- **Title**: [paper working title]
-- **Goal**: [one line — e.g. "improve small-object detection on aerial imagery"]
-- **Task type**: [ ] detection [ ] recognition [ ] segmentation (sem/inst/panoptic) [ ] pose [ ] OBB [ ] LLM [ ] multimodal (VLM) [ ] other: ___
-- **Target venue**: [CVPR / ICCV / ECCV / NeurIPS / ICLR / ACL / EMNLP / journal]
+- **Title**: OVD-Diagnose — Cross-Domain Failure Decomposition for Open-Vocabulary Detection
+- **Goal**: Benchmark + protocol decomposing OVD failure into localization / semantic-confusion / calibration across specialized domains (aerial, agriculture, medical).
+- **Task type**: [x] detection (open-vocabulary) [x] multimodal (VLM) — benchmark/analysis, NOT a new detector
+- **Target venue**: NeurIPS / ICLR Datasets & Benchmarks (or CVPR main as analysis)
 - **Deadline**: [YYYY-MM-DD]
-- **Novelty claim**: [what is new — architecture / loss / data / training recipe]
+- **Novelty claim**: First multi-specialized-domain OVD benchmark with an OVD-specific failure decomposition (L/S/C axes) + validation protocol. See paper/DESIGN.md.
+- **NOTE**: FCOS scaffold (models/fcos.py etc.) is now a *secondary* closed-set baseline / harness, not the contribution.
 
 ## Repo Layout
 
