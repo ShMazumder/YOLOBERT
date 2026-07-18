@@ -27,8 +27,13 @@ import numpy as np
 
 
 # ----------------------------------------------------------------- AP / AR (COCO)
-def _coco_eval(gt_json, results, use_cats=True):
-    """Return the 12-vector of COCOeval stats for bbox. results: list of dicts."""
+def _coco_eval(gt_json, results, use_cats=True, img_ids=None):
+    """Return the 12-vector of COCOeval stats for bbox. results: list of dicts.
+
+    img_ids: restrict evaluation to these images. CRITICAL when only a subset of
+    the dataset was run (e.g. --limit) — otherwise recall/AP are divided by the
+    FULL dataset GT and collapse to ~0.
+    """
     from pycocotools.coco import COCO
     from pycocotools.cocoeval import COCOeval
     coco_gt = COCO(gt_json) if isinstance(gt_json, str) else gt_json
@@ -36,19 +41,26 @@ def _coco_eval(gt_json, results, use_cats=True):
         return np.zeros(12)
     coco_dt = coco_gt.loadRes(results)
     ev = COCOeval(coco_gt, coco_dt, "bbox")
+    if img_ids is not None:
+        ev.params.imgIds = sorted(img_ids)    # score only the images actually run
     if not use_cats:
         ev.params.useCats = 0                 # class-agnostic: localization only
     ev.evaluate(); ev.accumulate(); ev.summarize()
     return ev.stats                            # [AP, AP50, AP75, AP_S, AP_M, AP_L, AR1, AR10, AR100, AR_S, AR_M, AR_L]
 
 
-def average_precision(gt_json, results):
-    return float(_coco_eval(gt_json, results, use_cats=True)[0])
+def _eval_img_ids(results):
+    """Images actually evaluated = those present in the detections."""
+    return sorted({d["image_id"] for d in results})
 
 
-def agnostic_recall(gt_json, results):
+def average_precision(gt_json, results, img_ids=None):
+    return float(_coco_eval(gt_json, results, use_cats=True, img_ids=img_ids)[0])
+
+
+def agnostic_recall(gt_json, results, img_ids=None):
     """Class-agnostic AR@100 — pure localization (ignores category labels)."""
-    return float(_coco_eval(gt_json, results, use_cats=False)[8])
+    return float(_coco_eval(gt_json, results, use_cats=False, img_ids=img_ids)[8])
 
 
 # ----------------------------------------------------------------- calibration
@@ -128,7 +140,8 @@ def calibration_errors(gt_json, results_global, fixed_score_thresh=0.25, iou_thr
     """C_ece + C_thr from GLOBAL-mode detections (the real operating condition)."""
     from pycocotools.coco import COCO
     coco_gt = COCO(gt_json) if isinstance(gt_json, str) else gt_json
-    n_gt = len(coco_gt.getAnnIds())
+    eval_imgs = set(_eval_img_ids(results_global))          # restrict to run images
+    n_gt = len(coco_gt.getAnnIds(imgIds=list(eval_imgs)))
     scores, hits = _match_tps(coco_gt, results_global, iou_thr)
     ece = expected_calibration_error(scores, hits)
     if len(scores):
@@ -155,10 +168,11 @@ def diagnose(gt_json, results_global, results_oracle, results_agnostic=None,
     from pycocotools.coco import COCO
     coco_gt = COCO(gt_json) if isinstance(gt_json, str) else gt_json
 
-    ap_global = average_precision(coco_gt, results_global)
-    ap_oracle = average_precision(coco_gt, results_oracle)
+    img_ids = _eval_img_ids(results_global)     # only score the images actually run
+    ap_global = average_precision(coco_gt, results_global, img_ids)
+    ap_oracle = average_precision(coco_gt, results_oracle, img_ids)
     ar_source = results_agnostic if results_agnostic else results_oracle
-    ar_agnostic = agnostic_recall(coco_gt, ar_source)
+    ar_agnostic = agnostic_recall(coco_gt, ar_source, img_ids)
     c_ece, c_thr = calibration_errors(coco_gt, results_global, fixed_score_thresh)
 
     return {
@@ -184,8 +198,9 @@ def ioa_f1(gt_json, results, ioa_thr=0.7, score_thr=0.1, per_class=True):
     """
     from pycocotools.coco import COCO
     coco = COCO(gt_json) if isinstance(gt_json, str) else gt_json
+    eval_imgs = set(_eval_img_ids(results))              # only images actually run
     gt_by = {}
-    for a in coco.loadAnns(coco.getAnnIds()):
+    for a in coco.loadAnns(coco.getAnnIds(imgIds=list(eval_imgs))):
         key = (a["image_id"], a["category_id"]) if per_class else a["image_id"]
         gt_by.setdefault(key, []).append(a["bbox"])
     n_gt = sum(len(v) for v in gt_by.values())
