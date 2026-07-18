@@ -2,7 +2,16 @@
 seed: 42
 work_dir: work_dirs/base
 
+# model (registry name in models/; kwargs via model_*)
+model: example_net
+# model_hidden: 128
+
 # data
+dataset: dummy         # dummy | coco | yolo | voc
+# img_size: 800        # detection: auto resize+flip+normalize so batches stack
+# data_root: data/coco
+# coco:  train_ann: .../instances_train2017.json,  val_ann: .../instances_val2017.json
+# yolo/voc: train_split / val_split
 batch_size: 32
 workers: 4
 num_classes: 10
@@ -13,7 +22,12 @@ weight_decay: 0.0001
 epochs: 20
 
 # eval
-primary_metric: top1   # TODO: AP / mIoU / accuracy per task
+primary_metric: top1   # key from the metric dict to track best on
+# metric: cls          # cls | semseg | coco  (omit -> default top-1)
+# metric_topk: [1, 5]           # cls
+# ignore_index: 255             # semseg
+# ann_file: data/coco/annotations/instances_val2017.json   # coco (required)
+# metric_iou_type: bbox         # coco: bbox | segm | keypoints
 
 # dummy dims for the scaffold's placeholder data — delete when real data wired
 _dummy_n: 256

@@ -42,47 +42,117 @@ def set_seed(seed):
 
 # ------------------------------------------------------------------ data
 def build_dataloaders(cfg):
-    # TODO: replace with your Dataset. Return (train_loader, val_loader).
-    from torch.utils.data import DataLoader, TensorDataset
-    n = cfg.get("_dummy_n", 256)
-    d = cfg.get("_dummy_dim", 32)
-    ds = TensorDataset(torch.randn(n, d), torch.randint(0, cfg.get("num_classes", 10), (n,)))
-    bs = cfg.get("batch_size", 32)
-    return (DataLoader(ds, batch_size=bs, shuffle=True, num_workers=cfg.get("workers", 2)),
-            DataLoader(ds, batch_size=bs, shuffle=False, num_workers=cfg.get("workers", 2)))
+    """Dispatch via the datasets/ package (dummy|coco|yolo|voc).
+
+    Falls back to an inline dummy loader if the package import fails, so the
+    scaffold runs standalone.
+    """
+    try:
+        import sys
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+        from datasets import build_dataloaders as _build
+        return _build(cfg)
+    except Exception as e:  # pragma: no cover - fallback path
+        print(f"[warn] datasets package unavailable ({e}); inline dummy loader")
+        from torch.utils.data import DataLoader, TensorDataset
+        n, d = cfg.get("_dummy_n", 256), cfg.get("_dummy_dim", 32)
+        ds = TensorDataset(torch.randn(n, d),
+                           torch.randint(0, cfg.get("num_classes", 10), (n,)))
+        bs = cfg.get("batch_size", 32)
+        return (DataLoader(ds, batch_size=bs, shuffle=True, num_workers=cfg.get("workers", 2)),
+                DataLoader(ds, batch_size=bs, shuffle=False, num_workers=cfg.get("workers", 2)))
 
 
 # ------------------------------------------------------------------ model
 def build_model(cfg):
-    # TODO: replace with your architecture.
-    return torch.nn.Sequential(
-        torch.nn.Linear(cfg.get("_dummy_dim", 32), 128),
-        torch.nn.ReLU(),
-        torch.nn.Linear(128, cfg.get("num_classes", 10)),
-    )
+    """Dispatch via the models/ registry. Set `model:` + `model_*` in config.
+
+    Falls back to a tiny inline net only if the registry import fails, so the
+    scaffold still runs standalone before you add real architectures.
+    """
+    try:
+        import sys
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+        from models import build as build_registered
+        cfg.setdefault("model", "example_net")
+        cfg.setdefault("model_in_dim", cfg.get("_dummy_dim", 32))
+        cfg.setdefault("model_num_classes", cfg.get("num_classes", 10))
+        return build_registered(cfg)
+    except Exception as e:  # pragma: no cover - fallback path
+        print(f"[warn] registry unavailable ({e}); using inline stub")
+        return torch.nn.Sequential(
+            torch.nn.Linear(cfg.get("_dummy_dim", 32), 128),
+            torch.nn.ReLU(),
+            torch.nn.Linear(128, cfg.get("num_classes", 10)),
+        )
 
 
 # ------------------------------------------------------------------ loops
+def _to_device(batch, device):
+    """Images tensor -> device; detection targets (list of dicts) -> device."""
+    x, y = batch
+    if torch.is_tensor(x):
+        x = x.to(device)
+    else:                                   # ragged list of image tensors
+        x = [img.to(device) for img in x]
+    if isinstance(y, (list, tuple)) and len(y) and isinstance(y[0], dict):
+        y = [{k: (v.to(device) if torch.is_tensor(v) else v) for k, v in t.items()}
+             for t in y]
+    elif torch.is_tensor(y):
+        y = y.to(device)
+    return x, y
+
+
 def train_one_epoch(model, loader, optimizer, criterion, device, epoch, writer):
     model.train()
     running = 0.0
-    for i, (x, y) in enumerate(loader):
-        x, y = x.to(device), y.to(device)
+    for i, batch in enumerate(loader):
+        x, y = _to_device(batch, device)
         optimizer.zero_grad()
-        loss = criterion(model(x), y)
+        out = model(x, y) if _wants_targets(model) else model(x)
+        if isinstance(out, dict):           # detection: model returns loss dict
+            loss = sum(out.values())
+            log_parts = {k: v.item() for k, v in out.items()}
+        else:                                # classification: external criterion
+            loss = criterion(out, y)
+            log_parts = {"loss": loss.item()}
         loss.backward()
         optimizer.step()
         running += loss.item()
         if i % 20 == 0:
             step = epoch * len(loader) + i
-            writer.add_scalar("train/loss", loss.item(), step)
+            for k, v in log_parts.items():
+                writer.add_scalar(f"train/{k}", v, step)
     return running / max(len(loader), 1)
 
 
+def _wants_targets(model):
+    """True if model.forward accepts a targets arg (detection-style)."""
+    import inspect
+    try:
+        return "targets" in inspect.signature(model.forward).parameters
+    except (ValueError, TypeError):
+        return False
+
+
 @torch.no_grad()
-def evaluate(model, loader, device):
-    """TODO: swap for task metric (AP/mIoU/Top-1/...). Returns dict."""
+def evaluate(model, loader, device, cfg=None):
+    """Task metric via tools/metrics.py when cfg['metric'] set; else top-1.
+
+    For coco/semseg you must adapt the model output -> metric.update() call
+    below to your prediction format (see metrics.py docstrings).
+    """
     model.eval()
+    cfg = cfg or {}
+    if cfg.get("metric"):
+        from metrics import build_metric
+        m = build_metric(cfg)
+        for x, y in loader:
+            x = x.to(device)
+            out = model(x)
+            m.update(out, y)            # cls/semseg: logits/labels; coco: adapt
+        return m.compute()
+    # default: top-1 (scaffold / classification)
     correct = total = 0
     for x, y in loader:
         x, y = x.to(device), y.to(device)
@@ -130,7 +200,7 @@ def main():
     for epoch in range(start_epoch, epochs):
         t0 = time.time()
         loss = train_one_epoch(model, train_loader, optimizer, criterion, device, epoch, writer)
-        metrics = evaluate(model, val_loader, device)
+        metrics = evaluate(model, val_loader, device, cfg)
         primary = metrics[cfg.get("primary_metric", "top1")]
         for k, v in metrics.items():
             writer.add_scalar(f"val/{k}", v, epoch)

@@ -43,7 +43,7 @@ def main():
     print(f"loaded {args.checkpoint}"
           + (f" (epoch {ck['epoch']})" if isinstance(ck, dict) and "epoch" in ck else ""))
 
-    metrics = evaluate(model, eval_loader, device)
+    metrics = evaluate(model, eval_loader, device, cfg)
     print(f"[{args.split}] " + " | ".join(f"{k}={v:.3f}" for k, v in metrics.items()))
 
     if args.dump:
