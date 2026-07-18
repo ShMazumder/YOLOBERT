@@ -142,15 +142,23 @@ def calibration_errors(gt_json, results_global, fixed_score_thresh=0.25, iou_thr
 
 
 # ----------------------------------------------------------------- top-level
-def diagnose(gt_json, results_global, results_oracle, results_agnostic,
+def diagnose(gt_json, results_global, results_oracle, results_agnostic=None,
              fixed_score_thresh=0.25, eps=1e-6):
-    """Compute the (L, S, C) failure fingerprint for one (domain, model)."""
+    """Compute the (L, S, C) failure fingerprint for one (domain, model).
+
+    Localization capacity is measured as class-agnostic recall of the ORACLE-mode
+    detections (correct class names, labels stripped via useCats=0). This isolates
+    "can the model box the objects" from vocabulary confusion WITHOUT relying on a
+    vague single-'object' prompt. Pass results_agnostic to override with a dedicated
+    class-agnostic proposal source (e.g. SAM).
+    """
     from pycocotools.coco import COCO
     coco_gt = COCO(gt_json) if isinstance(gt_json, str) else gt_json
 
     ap_global = average_precision(coco_gt, results_global)
     ap_oracle = average_precision(coco_gt, results_oracle)
-    ar_agnostic = agnostic_recall(coco_gt, results_agnostic)
+    ar_source = results_agnostic if results_agnostic else results_oracle
+    ar_agnostic = agnostic_recall(coco_gt, ar_source)
     c_ece, c_thr = calibration_errors(coco_gt, results_global, fixed_score_thresh)
 
     return {
@@ -162,7 +170,77 @@ def diagnose(gt_json, results_global, results_oracle, results_agnostic,
         "AP_global": ap_global,
         "AP_oracle": ap_oracle,
         "AR_agnostic": ar_agnostic,
+        "L_source": "agnostic_mode" if results_agnostic else "oracle_labelfree",
     }
+
+
+# ----------------------------------------------------------------- anchor + sanity
+def ioa_f1(gt_json, results, ioa_thr=0.7, score_thr=0.1, per_class=True):
+    """Paper-1-style anchor: Intersection-over-(gt)-Area matching + F1.
+
+    Reproduces the metric used by Tsourveloudis'26 so we can validate the harness
+    against their published aerial numbers (e.g. ~0.53 F1 on DIOR) before trusting
+    the COCO-AP-based axes. IoA is lenient on small/dense aerial objects vs IoU.
+    """
+    from pycocotools.coco import COCO
+    coco = COCO(gt_json) if isinstance(gt_json, str) else gt_json
+    gt_by = {}
+    for a in coco.loadAnns(coco.getAnnIds()):
+        key = (a["image_id"], a["category_id"]) if per_class else a["image_id"]
+        gt_by.setdefault(key, []).append(a["bbox"])
+    n_gt = sum(len(v) for v in gt_by.values())
+
+    dets = sorted((d for d in results if d["score"] >= score_thr), key=lambda d: -d["score"])
+    used, tp, fp = {}, 0, 0
+    for d in dets:
+        key = (d["image_id"], d["category_id"]) if per_class else d["image_id"]
+        gts = gt_by.get(key, [])
+        best, bj = 0.0, -1
+        dx, dy, dw, dh = d["bbox"]
+        for j, g in enumerate(gts):
+            if j in used.get(key, set()):
+                continue
+            gx, gy, gw, gh = g
+            ix = max(0.0, min(dx + dw, gx + gw) - max(dx, gx))
+            iy = max(0.0, min(dy + dh, gy + gh) - max(dy, gy))
+            inter = ix * iy
+            ioa = inter / (gw * gh) if gw * gh > 0 else 0.0
+            if ioa > best:
+                best, bj = ioa, j
+        if best >= ioa_thr and bj >= 0:
+            used.setdefault(key, set()).add(bj); tp += 1
+        else:
+            fp += 1
+    prec = tp / (tp + fp) if (tp + fp) else 0.0
+    rec = tp / n_gt if n_gt else 0.0
+    f1 = 2 * prec * rec / (prec + rec) if (prec + rec) else 0.0
+    return {"F1": f1, "precision": prec, "recall": rec, "TP": tp, "FP": fp, "n_gt": n_gt}
+
+
+def sanity_check(gt_json, results, n_images=5):
+    """Detect coordinate/format bugs: per image, report #gt, #pred, best IoU stats.
+
+    If many predictions exist but best-IoU is ~0, boxes are misaligned (wrong
+    coordinate space, xywh/xyxy mixup, or resized-vs-original mismatch) — NOT a
+    domain-gap problem.
+    """
+    from pycocotools.coco import COCO
+    coco = COCO(gt_json) if isinstance(gt_json, str) else gt_json
+    by_img = {}
+    for d in results:
+        by_img.setdefault(d["image_id"], []).append(d)
+    img_ids = sorted(coco.imgs.keys())[:n_images]
+    print(f"{'img':>12} {'#gt':>5} {'#pred':>6} {'meanBestIoU':>12} {'%gt IoU>0.5':>12}")
+    for iid in img_ids:
+        gts = [a["bbox"] for a in coco.loadAnns(coco.getAnnIds(imgIds=iid))]
+        preds = by_img.get(iid, [])
+        best_ious = []
+        for g in gts:
+            bi = max((_iou_xywh(p["bbox"], g) for p in preds), default=0.0)
+            best_ious.append(bi)
+        mean_bi = np.mean(best_ious) if best_ious else 0.0
+        frac = np.mean([b > 0.5 for b in best_ious]) if best_ious else 0.0
+        print(f"{iid:>12} {len(gts):>5} {len(preds):>6} {mean_bi:>12.3f} {frac:>12.2%}")
 
 
 # ----------------------------------------------------------------- self-test
