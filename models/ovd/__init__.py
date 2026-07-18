@@ -5,7 +5,8 @@ diagnostic runner can prompt any model with any vocabulary. See base.OVDAdapter.
 """
 from .base import OVDAdapter, ADAPTERS, build_adapter  # noqa: F401
 from . import yoloworld  # Register yoloworld modules into the base ADAPTERS map
-try:
-    from . import sam       # SAM proposal adapter (needs ultralytics SAM weights)
-except Exception:
-    pass
+for _mod in ("sam", "owlv2", "groundingdino"):   # optional adapters (extra deps)
+    try:
+        __import__(f"{__name__}.{_mod}")
+    except Exception:
+        pass
