@@ -126,7 +126,13 @@ class FCOS(nn.Module):
         if self.training:
             assert targets is not None, "targets required in train mode"
             return self.loss(cls, reg, ctr, targets, images.shape[-2:])
-        return self.postprocess(cls, reg, ctr, images.shape[-2:])
+        # eval: pull real COCO image_ids + original sizes from targets (if given)
+        image_ids = orig_sizes = None
+        if targets is not None:
+            image_ids = [int(t["image_id"].item()) for t in targets]
+            if "orig_size" in targets[0]:
+                orig_sizes = [tuple(t["orig_size"].tolist()) for t in targets]  # (W,H)
+        return self.postprocess(cls, reg, ctr, images.shape[-2:], image_ids, orig_sizes)
 
     # ---- locations per level (pixel centers) ----
     @staticmethod
@@ -248,14 +254,19 @@ class FCOS(nn.Module):
 
     # ---- INFERENCE -> COCO result dicts ----
     @torch.no_grad()
-    def postprocess(self, cls, reg, ctr, img_hw, image_ids=None):
+    def postprocess(self, cls, reg, ctr, img_hw, image_ids=None, orig_sizes=None):
         """Decode ltrb -> xyxy boxes, gather scores. Returns per-image list of
         COCO result dicts: {image_id, category_id, bbox=[x,y,w,h], score}.
         Applies per-image class-aware NMS (torchvision.ops.batched_nms).
+
+        orig_sizes: optional list of (W,H) per image. If given, boxes are rescaled
+        from the model input resolution back to the original image size so they
+        match the COCO gt json (required for correct AP).
         """
         from torchvision.ops import batched_nms
         B = cls[0].shape[0]
         C = self.num_classes
+        in_h, in_w = int(img_hw[0]), int(img_hw[1])
         # gather all levels per image first, then decode + NMS once.
         per_img_boxes = [[] for _ in range(B)]
         per_img_score = [[] for _ in range(B)]
@@ -284,6 +295,10 @@ class FCOS(nn.Module):
             if boxes.numel():
                 keep = batched_nms(boxes, sc, cl, self.nms_thresh)[:self.topk]
                 boxes, sc, cl = boxes[keep], sc[keep], cl[keep]
+                if orig_sizes is not None:                 # rescale to original size
+                    ow, oh = orig_sizes[b]
+                    scale = boxes.new_tensor([ow / in_w, oh / in_h, ow / in_w, oh / in_h])
+                    boxes = boxes * scale
             for (x1, y1, x2, y2), s, c_ in zip(boxes.tolist(), sc.tolist(), cl.tolist()):
                 results.append({
                     "image_id": iid,

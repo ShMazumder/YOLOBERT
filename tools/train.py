@@ -168,10 +168,17 @@ def evaluate(model, loader, device, cfg=None):
     if cfg.get("metric"):
         from metrics import build_metric
         m = build_metric(cfg)
-        for x, y in loader:
-            x = x.to(device)
-            out = model(x)
-            m.update(out, y)            # cls/semseg: logits/labels; coco: adapt
+        wants = _wants_targets(model)
+        # map contiguous label ids back to original dataset category ids (COCO sparse)
+        label2cat = getattr(getattr(loader, "dataset", None), "label2cat", None)
+        for batch in loader:
+            x, y = _to_device(batch, device)
+            # detection models need targets in eval for real image_id/orig_size
+            out = model(x, y) if wants else model(x)
+            if label2cat and isinstance(out, list):
+                for d in out:
+                    d["category_id"] = label2cat.get(d["category_id"], d["category_id"])
+            m.update(out, y)            # cls/semseg: logits/labels; coco: dicts
         return m.compute()
     # default: top-1 (scaffold / classification)
     correct = total = 0

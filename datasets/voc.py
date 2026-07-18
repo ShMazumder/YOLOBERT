@@ -51,6 +51,7 @@ class VocDetection(Dataset):
             "boxes": torch.tensor(boxes, dtype=torch.float32).reshape(-1, 4),
             "labels": torch.tensor(labels, dtype=torch.int64),
             "image_id": torch.tensor([i]),
+            "orig_size": torch.tensor(list(img.size)),  # (W,H)
         }
         if self.transforms is not None:
             img, target = self.transforms(img, target)
