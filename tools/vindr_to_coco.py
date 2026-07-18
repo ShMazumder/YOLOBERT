@@ -50,6 +50,7 @@ def main():
     # collect boxes per image, and the class name<->id map
     cats = {}
     boxes_by_img = defaultdict(list)
+    orig_dims = {}                               # image_id -> (orig_w, orig_h) from csv
     for r in rows:
         cid = int(r["class_id"])
         if cid == 14 or r.get("x_min", "") in ("", None):   # "No finding" / no box
@@ -58,6 +59,9 @@ def main():
         boxes_by_img[r["image_id"]].append(
             (cid, float(r["x_min"]), float(r["y_min"]),
              float(r["x_max"]), float(r["y_max"])))
+        # VinBigData train.csv carries original DICOM width/height per row
+        if "width" in r and "height" in r and r["width"] and r["height"]:
+            orig_dims[r["image_id"]] = (float(r["width"]), float(r["height"]))
 
     images, annotations = [], []
     ann_id = 1
@@ -69,7 +73,14 @@ def main():
         w, h = Image.open(path).size
         img_int_id = len(images) + 1
         images.append({"id": img_int_id, "file_name": fn, "width": w, "height": h})
-        sx, sy = scale.get(img_id_str, (1.0, 1.0))
+        # scale boxes from original DICOM coords (csv width/height) to the PNG size.
+        if img_id_str in scale:
+            sx, sy = scale[img_id_str]
+        elif img_id_str in orig_dims:
+            ow, oh = orig_dims[img_id_str]
+            sx, sy = w / ow, h / oh
+        else:
+            sx, sy = 1.0, 1.0
         for cid, x1, y1, x2, y2 in boxes:
             x1, y1, x2, y2 = x1 * sx, y1 * sy, x2 * sx, y2 * sy
             bw, bh = x2 - x1, y2 - y1
