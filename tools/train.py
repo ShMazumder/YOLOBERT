@@ -176,6 +176,27 @@ def is_main(rank):
     return rank == 0
 
 
+class DetDataParallel(torch.nn.DataParallel):
+    """DataParallel that also splits a detection target LIST across GPUs.
+
+    Stock DataParallel scatters tensors along dim0 but mangles a Python list of
+    variable-size per-image target dicts. Here we scatter images the normal way,
+    then slice the target list to match each device's image count.
+    """
+    def scatter(self, inputs, kwargs, device_ids):
+        from torch.nn.parallel.scatter_gather import scatter as _scatter
+        images, targets = inputs                       # (tensor, list[dict])
+        img_parts = _scatter(images, device_ids)       # per-device image chunks
+        parts, idx = [], 0
+        for dev, imgs in zip(device_ids, img_parts):
+            c = imgs.size(0)
+            sub = [{k: (v.to(dev) if torch.is_tensor(v) else v) for k, v in d.items()}
+                   for d in targets[idx:idx + c]]
+            parts.append((imgs, sub))
+            idx += c
+        return parts, [kwargs] * len(parts)
+
+
 @torch.no_grad()
 def evaluate(model, loader, device, cfg=None):
     """Task metric via tools/metrics.py when cfg['metric'] set; else top-1.
@@ -260,9 +281,11 @@ def main():
         model = DDP(model, device_ids=[local_rank], output_device=local_rank,
                     find_unused_parameters=False)
     elif mode == "dp" and torch.cuda.device_count() > 1:
-        model = torch.nn.DataParallel(model)
+        # detection returns list targets -> needs list-aware scatter
+        dp_cls = DetDataParallel if _wants_targets(model) else torch.nn.DataParallel
+        model = dp_cls(model)
         if main_proc:
-            print(f"DataParallel across {torch.cuda.device_count()} GPUs")
+            print(f"{dp_cls.__name__} across {torch.cuda.device_count()} GPUs")
 
     optimizer = torch.optim.AdamW(_unwrap(model).parameters(),
                                   lr=cfg.get("lr", 1e-3),
