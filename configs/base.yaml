@@ -1,0 +1,20 @@
+# base experiment config. Override at CLI: --opts lr=0.001 epochs=50
+seed: 42
+work_dir: work_dirs/base
+
+# data
+batch_size: 32
+workers: 4
+num_classes: 10
+
+# optim
+lr: 0.001
+weight_decay: 0.0001
+epochs: 20
+
+# eval
+primary_metric: top1   # TODO: AP / mIoU / accuracy per task
+
+# dummy dims for the scaffold's placeholder data — delete when real data wired
+_dummy_n: 256
+_dummy_dim: 32

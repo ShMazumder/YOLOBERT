@@ -1,0 +1,87 @@
+% main.tex — manuscript skeleton (venue-agnostic).
+% Swap \documentclass for your venue style:
+%   CVPR/ICCV : \documentclass[10pt,twocolumn,letterpaper]{article} + cvpr.sty
+%   NeurIPS   : \documentclass{article} + neurips_2024.sty
+%   ICLR      : iclr2025_conference.sty
+%   Journal   : IEEEtran / elsarticle
+% This default builds standalone with pdflatex + bibtex.
+\documentclass[10pt,twocolumn,letterpaper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}
+\usepackage{booktabs}      % results tables (see latex-results-table skill)
+\usepackage{amsmath,amssymb}
+\usepackage{multirow}
+\usepackage{xcolor}
+\usepackage[colorlinks=true,allcolors=blue]{hyperref}
+\usepackage{cleveref}
+
+\graphicspath{{figures/}}
+
+\title{[Paper Title]}
+\author{[Authors]\\ [Affiliation]\\ \texttt{[email]}}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+[2--4 sentences: problem, gap, method, headline result. State the primary metric
+and the margin over prior SOTA, e.g. ``\ldots achieving X.X AP on COCO, +Y.Y over
+[baseline].'']
+\end{abstract}
+
+\section{Introduction}
+\label{sec:intro}
+[Motivation. What task, why it matters. Limitation of prior work. Your insight in
+one sentence. Bullet the contributions:]
+\begin{itemize}
+  \item [Contribution 1 — architecture / loss / data.]
+  \item [Contribution 2 — empirical result.]
+  \item [Contribution 3 — analysis / ablation insight.]
+\end{itemize}
+
+\section{Related Work}
+\label{sec:related}
+[Group by theme: detection~\cite{ren2015faster,carion2020detr,zhang2023dino},
+backbones~\cite{he2016resnet,dosovitskiy2021vit,liu2021swin},
+multimodal~\cite{radford2021clip,li2023blip2,liu2023llava}. Position your work.]
+
+\section{Method}
+\label{sec:method}
+[Formal setup. Input $x \in \mathbb{R}^{H\times W\times 3}$, prediction $\hat{y}$,
+ground truth $y$. Describe architecture, then loss.]
+\begin{equation}
+  \mathcal{L} = \mathcal{L}_{\text{cls}} + \lambda \mathcal{L}_{\text{reg}}.
+  \label{eq:loss}
+\end{equation}
+[Reference figure with \cref{fig:arch}.]
+% \begin{figure}[t]\centering
+%   \includegraphics[width=\linewidth]{arch}
+%   \caption{Architecture overview.}\label{fig:arch}
+% \end{figure}
+
+\section{Experiments}
+\label{sec:exp}
+\subsection{Setup}
+[Datasets, splits, metrics (exact names), implementation details, hardware.]
+
+\subsection{Main Results}
+[Paste the table from the \texttt{latex-results-table} skill here.]
+% \input{tables/main_results}
+\Cref{tab:main} shows [\ldots].
+
+\subsection{Ablation}
+\label{sec:ablation}
+[One table per ablated component. Every number traces to a \texttt{work\_dirs/} log.]
+
+\section{Conclusion}
+\label{sec:conc}
+[Summary, limitations, future work.]
+
+{\small
+\bibliographystyle{ieee_fullname}   % or plainnat / abbrvnat per venue
+\bibliography{refs}
+}
+
+\end{document}

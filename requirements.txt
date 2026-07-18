@@ -1,0 +1,26 @@
+# Pin exact versions before submission for reproducibility.
+# torch/torchvision come from the base image; list here only if not using it.
+
+# --- core ---
+numpy
+pyyaml
+tqdm
+opencv-python-headless
+pillow
+scipy
+
+# --- metrics / eval ---
+pycocotools
+scikit-learn
+
+# --- experiment tracking / viz ---
+tensorboard
+matplotlib
+# wandb            # uncomment if using Weights & Biases
+
+# --- multimodal / LLM (uncomment as needed) ---
+# transformers
+# tokenizers
+# timm
+# einops
+# accelerate

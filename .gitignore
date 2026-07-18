@@ -1,0 +1,80 @@
+# ===== ML research .gitignore =====
+
+# --- checkpoints / logs / experiment outputs ---
+work_dirs/
+runs/
+outputs/
+output/
+logs/
+log/
+lightning_logs/
+wandb/
+mlruns/
+*.ckpt
+*.pth
+*.pt
+*.pkl
+*.onnx
+*.engine
+*.safetensors
+*.tar
+*.tar.gz
+events.out.tfevents.*
+
+# --- datasets / large data (keep code, not data) ---
+data/
+datasets/
+*.zip
+*.h5
+*.hdf5
+*.lmdb
+*.tfrecord
+*.npy
+*.npz
+# keep small annotation/split files by force-add: git add -f splits/*.json
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.ipynb_checkpoints/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- environments ---
+.venv/
+venv/
+env/
+.conda/
+.python-version
+
+# --- LaTeX build artifacts (keep .tex, .bib) ---
+*.aux
+*.log
+*.out
+*.toc
+*.bbl
+*.blg
+*.synctex.gz
+*.fdb_latexmk
+*.fls
+*.nav
+*.snm
+*.vrb
+paper/**/*.pdf
+!paper/figures/*.pdf
+
+# --- editor / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# --- secrets ---
+.env
+*.key
+wandb/settings
