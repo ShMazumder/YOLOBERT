@@ -70,23 +70,34 @@ def temperature_control(ann, results, temps, out_csv):
 
 # ----------------------------------------------------------------- vocab
 def _semantic_ranker(all_names):
-    """Return fn(present_names, others, k) -> k others most similar to the present
-    set, by CLIP/MiniLM text-embedding cosine. Falls back to random if unavailable."""
-    try:
-        from sentence_transformers import SentenceTransformer
-        import numpy as np
-        enc = SentenceTransformer("all-MiniLM-L6-v2")
-        emb = {n: v for n, v in zip(all_names, enc.encode(all_names, normalize_embeddings=True))}
+    """Return fn(present_names, others, k) -> the k `others` most semantically similar
+    to the present set, by CLIP text-embedding cosine.
 
-        def rank(pnames, others, k):
-            P = np.stack([emb[n] for n in pnames])
-            sims = [(max(float(P @ emb[o]), default=0.0), o) for o in others]
-            sims.sort(reverse=True)
-            return [o for _, o in sims[:k]]
-        return rank
-    except Exception as e:
-        print(f"[warn] semantic ranker unavailable ({e}); using random distractors")
-        return None
+    NOTE: uses transformers' CLIP text encoder directly rather than
+    sentence-transformers, because the latter imports HuggingFace `datasets`, which
+    this repo's local `datasets/` package shadows (silently degrading to random).
+    Raises on failure -- a silent fallback would invalidate the control.
+    """
+    import numpy as np
+    import torch
+    from transformers import CLIPModel, CLIPTokenizer
+    name = "openai/clip-vit-base-patch32"
+    tok = CLIPTokenizer.from_pretrained(name)
+    mod = CLIPModel.from_pretrained(name).eval()
+    with torch.no_grad():
+        inp = tok([f"a photo of a {n}" for n in all_names],
+                  padding=True, truncation=True, return_tensors="pt")
+        feats = mod.get_text_features(**inp)
+        feats = torch.nn.functional.normalize(feats, dim=-1).cpu().numpy()
+    emb = dict(zip(all_names, feats))
+    print(f"[semantic] CLIP text embeddings for {len(all_names)} classes")
+
+    def rank(pnames, others, k):
+        P = np.stack([emb[n] for n in pnames])          # (p, d)
+        sims = [(float(np.max(P @ emb[o])), o) for o in others]
+        sims.sort(reverse=True)
+        return [o for _, o in sims[:k]]
+    return rank
 
 
 def vocab_control(ann, imgs, model, extra_sizes, out_csv, limit=0, device=None,
