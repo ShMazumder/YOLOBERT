@@ -22,8 +22,8 @@
 
 \graphicspath{{figures/}}
 
-\title{[Paper Title]}
-\author{[Authors]\\ [Affiliation]\\ \texttt{[email]}}
+\title{OVD-Diagnose: Decomposing Open-Vocabulary Detector Failure\\ Across Specialized Domains}
+\author{[Author Name]\\ [Affiliation]\\ \texttt{[email]}}
 \date{}
 
 \begin{document}
@@ -142,10 +142,10 @@ confidences with an operating-point term,
 where $B_b$ are confidence bins and $F_1^{*}$ the best achievable $F_1$ over thresholds.
 Each $(\text{domain},\text{model})$ thus yields a fingerprint $(L, S, C)$.
 
-\textbf{Validation.} To establish construct validity we apply perturbations with known
-effect: injecting near-synonym distractor classes into $V$ must raise $S$ while leaving
-$L,C$ fixed; blurring inputs must raise $L$; temperature-scaling logits must move $C$. We
-additionally anchor absolute performance with an IoA-F1 score matching prior aerial
+\textbf{Validation.} To establish construct validity, the protocol prescribes perturbations
+with known effect: injecting near-synonym distractor classes into $V$ should raise $S$ while
+leaving $L,C$ fixed; blurring inputs should raise $L$; temperature-scaling logits should move
+$C$. Empirically, we anchor absolute performance with an IoA-F1 score matching prior aerial
 benchmarks, confirming the harness reproduces their model ordering.
 
 \section{Experiments}
@@ -198,8 +198,10 @@ vocabulary-induced axis.
 \subsection{Validation}
 \label{sec:validation}
 The IoA-F1 anchor reproduces the model ordering of prior aerial benchmarks (OWLv2 best),
-confirming the harness. Synthetic controls (Sec.~\ref{sec:method}) verify that each axis
-responds only to its intended perturbation.
+confirming the harness against external results. To further establish construct validity, we
+propose the synthetic-control protocol of Sec.~\ref{sec:method} --- perturbing vocabulary,
+input sharpness, and logit temperature to confirm each axis responds only to its intended
+cause; a full sensitivity study is left to future work.
 
 \section{Limitations}
 \label{sec:limitations}
@@ -232,7 +234,7 @@ disambiguation, or recalibration --- a given deployment actually needs. We relea
 benchmark and toolkit to support this diagnosis across the community.
 
 {\small
-\bibliographystyle{plainnat}   % swap to ieee_fullname/abbrvnat per venue
+\bibliographystyle{plain}   % built-in; swap to ieee_fullname/abbrvnat per venue
 \bibliography{refs}
 }
 
