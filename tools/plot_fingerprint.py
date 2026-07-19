@@ -33,9 +33,12 @@ def main():
 
     set_paper_style(column="single")
     domains = [d.split(":", 1) for d in args.domains]
+    S_UNSTABLE_AP = 0.01     # S_norm unreliable when AP_oracle ~ 0
 
-    # axes: L (localization), S_norm (semantic), C_ece scaled x5 for visibility
-    axis_keys = [("L", "L", 1.0), ("S_norm", r"$S_{norm}$", 1.0),
+    # Honest discriminators: localizability (AR_SAM), vocabulary cost (S_norm, hatched
+    # where unstable), calibration (C_ece x5). AR_SAM is the clean cross-domain axis.
+    axis_keys = [("AR_agnostic", r"AR$_{SAM}$", 1.0),
+                 ("S_norm", r"$S_{norm}$", 1.0),
                  ("C_ece", r"$C_{ece}\!\times\!5$", 5.0)]
     colors = [PALETTE["blue"], PALETTE["vermil"], PALETTE["green"]]
 
@@ -43,18 +46,26 @@ def main():
     x = np.arange(len(domains))
     w = 0.25
     for j, (key, label, scale) in enumerate(axis_keys):
-        vals = []
+        vals, hatched = [], []
         for _, cpath in domains:
             with open(cpath) as f:
                 rows = list(csv.DictReader(f))
             vals.append(_mean(rows, key) * scale)
-        ax.bar(x + (j - 1) * w, vals, w, label=label, color=colors[j])
+            # flag S_norm as unstable when mean AP_oracle ~ 0 for this domain
+            hatched.append(key == "S_norm" and _mean(rows, "AP_oracle") < S_UNSTABLE_AP)
+        bars = ax.bar(x + (j - 1) * w, vals, w, label=label, color=colors[j])
+        for b, h in zip(bars, hatched):     # hatch + fade unreliable S bars
+            if h:
+                b.set_hatch("///"); b.set_alpha(0.35); b.set_edgecolor("white")
 
     ax.set_xticks(x)
     ax.set_xticklabels([d.capitalize() for d, _ in domains])
-    ax.set_ylabel("failure magnitude")
+    ax.set_ylabel("failure / signal magnitude")
     ax.set_ylim(0, 1.05)
     ax.legend(ncol=3, loc="upper center", bbox_to_anchor=(0.5, 1.15))
+    ax.text(0.99, 0.02, "hatched = unstable (AP$_o$≈0)", transform=ax.transAxes,
+            ha="right", va="bottom", fontsize=6, color="0.4")
+    Path(args.out).parent.mkdir(parents=True, exist_ok=True)   # ensure figures/ exists
     save(fig, args.out)
     print(f"wrote {args.out}.pdf")
 
