@@ -26,19 +26,53 @@
 \maketitle
 
 \begin{abstract}
-[2--4 sentences: problem, gap, method, headline result. State the primary metric
-and the margin over prior SOTA, e.g. ``\ldots achieving X.X AP on COCO, +Y.Y over
-[baseline].'']
+Open-vocabulary object detectors (OVD) generalize poorly outside natural images, but
+\emph{why} they fail in specialized domains is not measured: aggregate metrics such as
+mAP collapse several distinct error sources into one number. We introduce
+\textbf{OVD-Diagnose}, a diagnostic protocol and cross-domain benchmark that decomposes
+OVD failure into three interpretable axes --- localization, semantic confusion, and
+calibration --- using controlled inference modes (global vocabulary, oracle vocabulary,
+and a class-agnostic proposer). Applied to frozen detectors across specialized domains,
+the protocol reveals that the dominant failure axis is \emph{domain-specific}: on aerial
+imagery models localize objects but are bottlenecked by vocabulary confusion (oracle
+prompting more than triples AP), whereas on chest radiographs localization itself fails
+(a class-agnostic SAM proposer recovers under $1\%$ of findings), rendering vocabulary
+moot. We further show that semantic confusion grows with detector capability. These
+patterns are invisible to closed-set error tools, and the protocol is training-free,
+model-agnostic, and reproducible on modest hardware.
 \end{abstract}
 
 \section{Introduction}
 \label{sec:intro}
-[Motivation. What task, why it matters. Limitation of prior work. Your insight in
-one sentence. Bullet the contributions:]
+Open-vocabulary object detection (OVD)~\cite{radford2021clip} promises detection of
+arbitrary categories from text, yet its zero-shot performance degrades sharply outside
+the natural-image distribution it was trained on. This matters precisely where OVD would
+be most useful: aerial survey, medical screening, and other specialized domains where
+exhaustively annotating every category is impractical. Recent benchmarks confirm the
+degradation but report it as a single collapsed number (mAP or F1), which cannot say
+\emph{why} a detector fails --- whether it cannot find the objects, cannot name them, or
+simply mis-thresholds its own confidence. These are different problems demanding different
+remedies, and conflating them has slowed progress on specialized-domain OVD.
+
+We argue that OVD failure should be \emph{decomposed}, not summarized. Closed-set error
+toolkits (e.g.\ TIDE) dissect detector errors but predate and ignore the axis unique to
+OVD: error induced by the open vocabulary itself. We introduce \textbf{OVD-Diagnose}, a
+training-free protocol that isolates three axes with controlled inference modes ---
+prompting a detector with the full domain vocabulary, with only the classes present in an
+image, and (for localization) with a class-agnostic proposer --- and reads off
+localization ($L$), semantic-confusion ($S$), and calibration ($C$) error from the gaps
+between them.
+
+Our contributions are:
 \begin{itemize}
-  \item [Contribution 1 — architecture / loss / data.]
-  \item [Contribution 2 — empirical result.]
-  \item [Contribution 3 — analysis / ablation insight.]
+  \item \textbf{A diagnostic protocol} that decomposes OVD failure into localization,
+  semantic-confusion, and calibration axes, validated by synthetic controls and an
+  IoA-F1 anchor that reproduces prior benchmarks' model ordering.
+  \item \textbf{A cross-domain benchmark} over frozen state-of-the-art OVD detectors and
+  specialized domains, released as an open toolkit for arbitrary detector/domain pairs.
+  \item \textbf{Findings:} the dominant failure axis is domain-specific (aerial is
+  vocabulary-bound; medical is localization-bound), and semantic confusion increases with
+  detector capability --- neither observable from aggregate mAP.
 \end{itemize}
 
 \section{Related Work}
