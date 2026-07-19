@@ -14,7 +14,11 @@
 \usepackage{multirow}
 \usepackage{xcolor}
 \usepackage[colorlinks=true,allcolors=blue]{hyperref}
-\usepackage{cleveref}
+% cleveref is nicer but not in minimal TeXLive; shim so \cref/\Cref compile as \ref.
+% For prettier output: tlmgr install cleveref, then delete these two lines + uncomment below.
+\providecommand{\cref}[1]{\ref{#1}}
+\providecommand{\Cref}[1]{\ref{#1}}
+% \usepackage{cleveref}
 
 \graphicspath{{figures/}}
 
