@@ -126,16 +126,17 @@ def main():
                                   score_thr=args.fixed_thresh)["F1"]
             json.dump(fp, open(mdir / "fingerprint.json", "w"), indent=2)
             rows.append(fp)
-            print(f"  -> {name}: L={fp['L']:.3f} S_norm={fp['S_norm']:.3f} "
-                  f"C_ece={fp['C_ece']:.3f} AP_g={fp['AP_global']:.3f} AP_o={fp['AP_oracle']:.3f}")
+            print(f"  -> {name}: L={fp['L']:.3f} L_det={fp['L_det']:.3f} "
+                  f"S_norm={fp['S_norm']:.3f} C_ece={fp['C_ece']:.3f} "
+                  f"AP_g={fp['AP_global']:.3f} AP_o={fp['AP_oracle']:.3f}")
             del m
         except Exception:
             print(f"[{name}] FAILED:\n" + traceback.format_exc())
 
     # --- consolidated table ---
     if rows:
-        keys = ["model", "L", "S", "S_norm", "C_ece", "C_thr",
-                "AP_global", "AP_oracle", "AR_agnostic", "IoA_F1", "L_source"]
+        keys = ["model", "L", "L_det", "S", "S_norm", "C_ece", "C_thr",
+                "AP_global", "AP_oracle", "AR_agnostic", "AR_det", "IoA_F1", "L_source"]
         with open(out_dir / "fingerprints.csv", "w", newline="") as f:
             w = csv.DictWriter(f, fieldnames=keys, extrasaction="ignore")
             w.writeheader()
