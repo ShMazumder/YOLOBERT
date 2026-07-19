@@ -71,11 +71,13 @@ def main():
     ap.add_argument("--models", default=None, help='comma list "name:weights,..."')
     ap.add_argument("--sam_weights", default="mobile_sam.pt", help='"none" to skip SAM')
     ap.add_argument("--fixed_thresh", type=float, default=0.25)
+    ap.add_argument("--bootstrap", type=int, default=0,
+                    help="n bootstrap resamples for IoA-F1 CI (0 = off, 1000 typical)")
     args = ap.parse_args()
 
     from pycocotools.coco import COCO
     from models.ovd import build_adapter
-    from tools.ovd_diagnose import diagnose, ioa_f1
+    from tools.ovd_diagnose import bootstrap_ci, diagnose, ioa_f1
 
     coco = COCO(args.ann)
     cat_ids = sorted(coco.getCatIds())
@@ -124,6 +126,11 @@ def main():
             # Paper-1-style IoA-F1 anchor (global mode) for validation
             fp["IoA_F1"] = ioa_f1(args.ann, res["global"], ioa_thr=0.7,
                                   score_thr=args.fixed_thresh)["F1"]
+            if args.bootstrap:                      # image-level 95% CI on the anchor
+                ci = bootstrap_ci(args.ann, res["global"], metric="ioa_f1",
+                                  n_boot=args.bootstrap, score_thr=args.fixed_thresh)
+                fp["IoA_F1_lo"], fp["IoA_F1_hi"] = ci["lo"], ci["hi"]
+            fp["n_images"] = len(img_ids)
             json.dump(fp, open(mdir / "fingerprint.json", "w"), indent=2)
             rows.append(fp)
             print(f"  -> {name}: L={fp['L']:.3f} L_det={fp['L_det']:.3f} "
@@ -135,8 +142,9 @@ def main():
 
     # --- consolidated table ---
     if rows:
-        keys = ["model", "L", "L_det", "S", "S_norm", "C_ece", "C_thr",
-                "AP_global", "AP_oracle", "AR_agnostic", "AR_det", "IoA_F1", "L_source"]
+        keys = ["model", "n_images", "L", "L_det", "S", "S_norm", "C_ece", "C_thr",
+                "AP_global", "AP_oracle", "AR_agnostic", "AR_det",
+                "IoA_F1", "IoA_F1_lo", "IoA_F1_hi", "L_source"]
         with open(out_dir / "fingerprints.csv", "w", newline="") as f:
             w = csv.DictWriter(f, fieldnames=keys, extrasaction="ignore")
             w.writeheader()
