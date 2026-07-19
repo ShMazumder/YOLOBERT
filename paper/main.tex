@@ -261,11 +261,13 @@ Our study is deliberately scoped to what can be measured rigorously on modest ha
 several limitations follow. \textbf{Scale.} We report two domains and three detectors on
 evaluation subsets; absolute numbers will shift with full splits and additional models,
 though the qualitative axes are stable across the sizes we tested. \textbf{Localization
-reference.} $L$ is defined relative to a frozen natural-image SAM proposer; because SAM is
-itself weak on chest radiographs, $L{\approx}1$ conflates ``intrinsically hard to localize''
-with ``hard for SAM.'' A domain-tuned proposer would tighten this bound, but the
-$35\times$ gap in $\mathrm{AR}_{\mathrm{SAM}}$ between aerial and medical is far larger than
-plausible proposer noise. \textbf{The $S$ axis.} $S_{\mathrm{norm}}$ is a ratio on
+reference.} A single natural-image SAM proposer would conflate ``intrinsically hard to
+localize'' with ``hard for SAM.'' We therefore triangulate localization with three
+references: the SAM proposer ($L$), the detector's own class-agnostic boxes
+($L_{\mathrm{det}}$, assumption-free), and an optional domain-trained proposer plugged in
+through the same interface. On medical, $L$ and $L_{\mathrm{det}}$ agree at ${\approx}1$,
+so the reading is not merely a SAM artifact; a domain proposer that nonetheless recovered
+findings would localize the blame to SAM, and our toolkit supports that check directly. \textbf{The $S$ axis.} $S_{\mathrm{norm}}$ is a ratio on
 $\mathrm{AP}_{\mathrm{oracle}}$ and is undefined when localization collapses; it therefore
 supports a strong \emph{within-aerial} conclusion (confusion grows with capability) but not
 a two-domain comparison, which our analysis rests instead on the localization axis.
