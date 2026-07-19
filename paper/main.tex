@@ -214,6 +214,19 @@ on medical is important: it indicates the reading is not merely an artifact of a
 natural-image proposer, though a domain-tuned proposer remains a valuable check
 (Sec.~\ref{sec:limitations}).
 
+\Cref{fig:qual} shows representative cases: on aerial imagery detections often localize a
+GT object but assign a wrong (semantically adjacent) class, whereas on chest radiographs GT
+findings are frequently left with no overlapping detection at all.
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.49\linewidth]{figures/qual_aerial}
+  \includegraphics[width=0.49\linewidth]{figures/qual_medical}
+  \caption{GT (green) vs.\ detections (red). Left (aerial): boxes land on objects but with
+  wrong class labels --- semantic confusion. Right (medical): findings go undetected ---
+  localization failure.}
+  \label{fig:qual}
+\end{figure}
+
 \textbf{(2) A capability trend (hypothesis).} $S_{\mathrm{norm}}$ is numerically larger for
 higher-capacity detectors in our aerial results, but because it is a ratio on small
 $\mathrm{AP}_{\mathrm{oracle}}$ values and rests on three models, we report it only as a
