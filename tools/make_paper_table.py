@@ -44,10 +44,10 @@ def main():
         r"$^{\dagger}$ unstable when AP$_{\mathrm{oracle}}{\approx}0$. "
         r"$C_{\mathrm{ece}}$ is expected calibration error.}",
         r"  \label{tab:fingerprint}",
-        r"  \begin{tabular}{ll cc c c c c}",
+        r"  \begin{tabular}{ll cc cc c c c}",
         r"    \toprule",
         r"    Domain & Model & AP$_{\mathrm{g}}$ & AP$_{\mathrm{o}}$ & $L$ & "
-        r"$S_{\mathrm{norm}}$ & $C_{\mathrm{ece}}$ & IoA-F1 \\",
+        r"$L_{\mathrm{det}}$ & $S_{\mathrm{norm}}$ & $C_{\mathrm{ece}}$ & IoA-F1 \\",
         r"    \midrule",
     ]
 
@@ -57,14 +57,16 @@ def main():
         for ri, r in enumerate(rows):
             model = MODEL_LABEL.get(r["model"], r["model"])
             apg = float(r["AP_global"]); apo = float(r["AP_oracle"])
-            L = float(r["L"]); sn = float(r["S_norm"])
+            L = float(r["L"]); ldet = float(r.get("L_det", "nan") or "nan")
+            sn = float(r["S_norm"])
             ce = float(r["C_ece"]); f1 = float(r.get("IoA_F1", 0) or 0)
             sn_str = f"{sn:.2f}" + (r"$^{\dagger}$" if apo < S_UNSTABLE_AP else "")
+            ld_str = "--" if ldet != ldet else f"{ldet:.2f}"      # NaN -> --
             dom_cell = (rf"\multirow{{{n}}}{{*}}{{{dname.capitalize()}}}"
                         if ri == 0 else "")
             lines.append(
                 f"    {dom_cell} & {model} & {apg:.3f} & {apo:.3f} & "
-                f"{L:.2f} & {sn_str} & {ce:.3f} & {f1:.3f} \\\\")
+                f"{L:.2f} & {ld_str} & {sn_str} & {ce:.3f} & {f1:.3f} \\\\")
         if di < len(domains) - 1:
             lines.append(r"    \midrule")
 
