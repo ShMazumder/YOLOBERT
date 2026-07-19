@@ -1,0 +1,27 @@
+% Cross-domain OVD-Diagnose fingerprint — generated from runs/diag/*/fingerprints.csv
+% Regenerate: python tools/make_paper_table.py --domains aerial:... medical:... --out paper/tables/ovd_fingerprint.tex
+% Aerial: 1325 imgs (partial split). Medical (VinDr): 200 imgs. Update after full runs.
+\begin{table}[t]
+  \centering
+  \caption{Cross-domain OVD failure fingerprint. AP is COCO mAP@[.5:.95].
+  $L{=}1{-}\mathrm{AR}_{\mathrm{SAM}}$ (domain-level localizability).
+  $S_{\mathrm{norm}}$ is the fraction of achievable AP lost to vocabulary confusion;
+  $^{\dagger}$ unstable when AP$_{\mathrm{oracle}}{\approx}0$.
+  $C_{\mathrm{ece}}$ is expected calibration error. Aerial is \emph{semantic-confusion
+  bound} (models localize; oracle triples AP); medical is \emph{localization bound}
+  ($L{\approx}1$: even SAM boxes $<$1\% of findings).}
+  \label{tab:fingerprint}
+  \begin{tabular}{ll cc c c c c}
+    \toprule
+    Domain & Model & AP$_{\mathrm{g}}$ & AP$_{\mathrm{o}}$ & $L$ & $S_{\mathrm{norm}}$ & $C_{\mathrm{ece}}$ & IoA-F1 \\
+    \midrule
+    \multirow{3}{*}{Aerial} & YOLO-World    & 0.004 & 0.018 & 0.86 & 0.76 & 0.009 & 0.003 \\
+                            & OWLv2         & 0.015 & 0.079 & 0.86 & 0.81 & 0.024 & 0.039 \\
+                            & Grounding DINO & 0.004 & 0.050 & 0.86 & 0.92 & 0.084 & 0.006 \\
+    \midrule
+    \multirow{3}{*}{Medical} & YOLO-World    & 0.000 & 0.000 & 1.00 & 0.91$^{\dagger}$ & 0.001 & 0.000 \\
+                             & OWLv2         & 0.002 & 0.004 & 1.00 & 0.48$^{\dagger}$ & 0.011 & 0.072 \\
+                             & Grounding DINO & 0.000 & 0.001 & 1.00 & 0.95$^{\dagger}$ & 0.085 & 0.082 \\
+    \bottomrule
+  \end{tabular}
+\end{table}

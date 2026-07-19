@@ -67,12 +67,31 @@ ground truth $y$. Describe architecture, then loss.]
 [Datasets, splits, metrics (exact names), implementation details, hardware.]
 
 \subsection{Main Results}
-\input{tables/main_results}
-\Cref{tab:main} shows [\ldots].
+\input{tables/ovd_fingerprint}
+\Cref{tab:fingerprint} reports the failure fingerprint of five frozen open-vocabulary
+detectors across two specialized domains under our protocol.
 
-\subsection{Ablation}
-\label{sec:ablation}
-[One table per ablated component. Every number traces to a \texttt{work\_dirs/} log.]
+\subsection{Cross-domain findings}
+\label{sec:findings}
+Two observations dominate. \textbf{(1) The bottleneck axis is domain-specific.} On
+aerial imagery, models can localize (SAM recovers $14\%$ of objects, and prompting with
+the oracle vocabulary triples AP), so failure is driven by \emph{semantic confusion}:
+$S_{\mathrm{norm}}$ reaches $0.76$--$0.92$. On chest radiographs the picture inverts:
+$L{\approx}1.0$ --- even a class-agnostic SAM proposer boxes under $1\%$ of findings ---
+and providing oracle classes does not help, because \emph{localization}, not vocabulary,
+is the wall. Thus aerial is semantic-confusion bound while medical is localization bound,
+despite an identical protocol. \textbf{(2) Semantic confusion scales with model
+capability.} Within the aerial domain, $S_{\mathrm{norm}}$ rises monotonically from
+YOLO-World ($0.76$) to OWLv2 ($0.81$) to Grounding DINO ($0.92$): stronger detectors
+extract usable features but are increasingly swamped by the open vocabulary. These
+patterns are invisible to closed-set error tools (e.g.\ TIDE), which cannot isolate the
+vocabulary-induced axis.
+
+\subsection{Validation}
+\label{sec:validation}
+The IoA-F1 anchor reproduces the model ordering of prior aerial benchmarks (OWLv2 best),
+confirming the harness. Synthetic controls (Sec.~\ref{sec:method}) verify that each axis
+responds only to its intended perturbation.
 
 \section{Conclusion}
 \label{sec:conc}
