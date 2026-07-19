@@ -69,7 +69,28 @@ def temperature_control(ann, results, temps, out_csv):
 
 
 # ----------------------------------------------------------------- vocab
-def vocab_control(ann, imgs, model, extra_sizes, out_csv, limit=0, device=None):
+def _semantic_ranker(all_names):
+    """Return fn(present_names, others, k) -> k others most similar to the present
+    set, by CLIP/MiniLM text-embedding cosine. Falls back to random if unavailable."""
+    try:
+        from sentence_transformers import SentenceTransformer
+        import numpy as np
+        enc = SentenceTransformer("all-MiniLM-L6-v2")
+        emb = {n: v for n, v in zip(all_names, enc.encode(all_names, normalize_embeddings=True))}
+
+        def rank(pnames, others, k):
+            P = np.stack([emb[n] for n in pnames])
+            sims = [(max(float(P @ emb[o]), default=0.0), o) for o in others]
+            sims.sort(reverse=True)
+            return [o for _, o in sims[:k]]
+        return rank
+    except Exception as e:
+        print(f"[warn] semantic ranker unavailable ({e}); using random distractors")
+        return None
+
+
+def vocab_control(ann, imgs, model, extra_sizes, out_csv, limit=0, device=None,
+                  distractor="random"):
     from pycocotools.coco import COCO
     from tools.ovd_diagnose import average_precision
     coco = COCO(ann)
@@ -80,7 +101,7 @@ def vocab_control(ann, imgs, model, extra_sizes, out_csv, limit=0, device=None):
     if limit:
         img_ids = img_ids[:limit]
 
-    # oracle AP (present-only) is the fixed reference; S = AP_oracle - AP(|V|)
+    ranker = _semantic_ranker(all_names) if distractor == "semantic" else None
     rng = random.Random(0)
     rows = []
     for k in extra_sizes:
@@ -93,7 +114,10 @@ def vocab_control(ann, imgs, model, extra_sizes, out_csv, limit=0, device=None):
             if not pnames:
                 continue
             others = [n for n in all_names if n not in pnames]
-            distract = rng.sample(others, min(k, len(others)))
+            if ranker is not None and k > 0:
+                distract = ranker(pnames, others, k)            # semantically nearest
+            else:
+                distract = rng.sample(others, min(k, len(others)))  # random
             vocab = pnames + distract
             for box, sc, ci in model.predict(path, vocab):
                 nm = vocab[ci]
@@ -171,6 +195,8 @@ def main():
     ap.add_argument("--sam_weights", default="mobile_sam.pt")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--device", default=None)
+    ap.add_argument("--distractor", default="random", choices=["random", "semantic"],
+                    help="vocab control: random vs semantically-similar distractors")
     args = ap.parse_args()
 
     if args.control == "temperature":
@@ -180,7 +206,7 @@ def main():
         from models.ovd import build_adapter
         model = build_adapter(args.model, weights=args.weights, device=args.device)
         vocab_control(args.ann, args.imgs, model, [0, 5, 20, 40, 79], args.out,
-                      args.limit, args.device)
+                      args.limit, args.device, distractor=args.distractor)
     elif args.control == "blur":
         from models.ovd import build_adapter
         sam = build_adapter("sam", weights=args.sam_weights, device=args.device)

@@ -171,12 +171,17 @@ def diagnose(gt_json, results_global, results_oracle, results_agnostic=None,
     img_ids = _eval_img_ids(results_global)     # only score the images actually run
     ap_global = average_precision(coco_gt, results_global, img_ids)
     ap_oracle = average_precision(coco_gt, results_oracle, img_ids)
+    # L from an external proposer (SAM) if given, else oracle-labelfree.
     ar_source = results_agnostic if results_agnostic else results_oracle
     ar_agnostic = agnostic_recall(coco_gt, ar_source, img_ids)
+    # detector-INTRINSIC localizability: the model's OWN oracle boxes, labels stripped.
+    # Answers "what if the detector localizes but SAM misses?" -- proposer-independent.
+    ar_det = agnostic_recall(coco_gt, results_oracle, img_ids)
     c_ece, c_thr = calibration_errors(coco_gt, results_global, fixed_score_thresh)
 
     return {
-        "L": 1.0 - ar_agnostic,
+        "L": 1.0 - ar_agnostic,                  # proposer-based (SAM) L
+        "L_det": 1.0 - ar_det,                    # detector-intrinsic L (no SAM)
         "S": ap_oracle - ap_global,
         "S_norm": (ap_oracle - ap_global) / max(ap_oracle, eps),
         "C_ece": c_ece,
@@ -184,6 +189,7 @@ def diagnose(gt_json, results_global, results_oracle, results_agnostic=None,
         "AP_global": ap_global,
         "AP_oracle": ap_oracle,
         "AR_agnostic": ar_agnostic,
+        "AR_det": ar_det,
         "L_source": "agnostic_mode" if results_agnostic else "oracle_labelfree",
     }
 
@@ -230,6 +236,70 @@ def ioa_f1(gt_json, results, ioa_thr=0.7, score_thr=0.1, per_class=True):
     rec = tp / n_gt if n_gt else 0.0
     f1 = 2 * prec * rec / (prec + rec) if (prec + rec) else 0.0
     return {"F1": f1, "precision": prec, "recall": rec, "TP": tp, "FP": fp, "n_gt": n_gt}
+
+
+def bootstrap_ci(gt_json, results, metric="ioa_f1", n_boot=1000, seed=0,
+                 ioa_thr=0.7, score_thr=0.25):
+    """Image-level bootstrap CI for a per-image metric. Resamples the evaluated
+    images with replacement n_boot times. metric: 'ioa_f1' or 'recall_agnostic'.
+
+    Returns {'mean','lo','hi'} (95% percentile interval). Cheap: uses the greedy
+    matcher, not COCOeval, so 1000 resamples run in seconds.
+    """
+    from pycocotools.coco import COCO
+    coco = COCO(gt_json) if isinstance(gt_json, str) else gt_json
+    rng = np.random.default_rng(seed)
+    img_ids = _eval_img_ids(results)
+
+    # pre-index per image for fast resampling
+    res_by_img = {}
+    for d in results:
+        res_by_img.setdefault(d["image_id"], []).append(d)
+    gt_by_img = {}
+    for a in coco.loadAnns(coco.getAnnIds(imgIds=img_ids)):
+        gt_by_img.setdefault(a["image_id"], []).append(a)
+
+    def _score(sample_ids):
+        # class-agnostic (recall) or class-aware IoA-F1 over the sampled images
+        per_class = metric == "ioa_f1"
+        gt_by, used = {}, {}
+        n_gt = 0
+        for iid in sample_ids:
+            for a in gt_by_img.get(iid, []):
+                key = (iid, a["category_id"]) if per_class else iid
+                gt_by.setdefault(key, []).append(a["bbox"]); n_gt += 1
+        dets = []
+        for iid in sample_ids:
+            dets.extend(res_by_img.get(iid, []))
+        dets = sorted((d for d in dets if d["score"] >= score_thr), key=lambda d: -d["score"])
+        tp = fp = 0
+        for d in dets:
+            key = (d["image_id"], d["category_id"]) if per_class else d["image_id"]
+            best, bj = 0.0, -1
+            for j, g in enumerate(gt_by.get(key, [])):
+                if j in used.get(key, set()):
+                    continue
+                dx, dy, dw, dh = d["bbox"]; gx, gy, gw, gh = g
+                ix = max(0.0, min(dx+dw, gx+gw)-max(dx, gx))
+                iy = max(0.0, min(dy+dh, gy+gh)-max(dy, gy))
+                inter = ix*iy; ioa = inter/(gw*gh) if gw*gh > 0 else 0.0
+                if ioa > best:
+                    best, bj = ioa, j
+            if best >= ioa_thr and bj >= 0:
+                used.setdefault(key, set()).add(bj); tp += 1
+            else:
+                fp += 1
+        if metric == "recall_agnostic":
+            return tp / n_gt if n_gt else 0.0
+        prec = tp/(tp+fp) if (tp+fp) else 0.0
+        rec = tp/n_gt if n_gt else 0.0
+        return 2*prec*rec/(prec+rec) if (prec+rec) else 0.0
+
+    vals = np.array([_score(rng.choice(img_ids, size=len(img_ids), replace=True))
+                     for _ in range(n_boot)])
+    return {"mean": float(vals.mean()),
+            "lo": float(np.percentile(vals, 2.5)),
+            "hi": float(np.percentile(vals, 97.5))}
 
 
 def sanity_check(gt_json, results, n_images=5):

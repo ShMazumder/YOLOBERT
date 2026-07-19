@@ -42,13 +42,13 @@ mAP collapse several distinct error sources into one number. We introduce
 OVD failure into three interpretable axes --- localization, semantic confusion, and
 calibration --- using controlled inference modes (global vocabulary, oracle vocabulary,
 and a class-agnostic proposer). Applied to frozen detectors across specialized domains,
-the protocol reveals that the dominant failure axis is \emph{domain-specific}: on aerial
-imagery models localize objects but are bottlenecked by vocabulary confusion (oracle
-prompting more than triples AP), whereas on chest radiographs localization itself fails
-(a class-agnostic SAM proposer recovers under $1\%$ of findings), rendering vocabulary
-moot. We further show that semantic confusion grows with detector capability. These
-patterns are invisible to closed-set error tools, and the protocol is training-free,
-model-agnostic, and reproducible on modest hardware.
+the protocol indicates that the dominant failure axis differs across the two domains we
+study: on aerial imagery detectors retain measurable localizability and oracle prompting
+substantially raises the (still-low) AP, whereas on chest radiographs localizability is near
+zero under \emph{both} an external proposer and the detectors' own boxes, so vocabulary
+disambiguation cannot help. We report these as descriptive observations, not domain-level
+laws, and stress that all detectors operate in a low-AP regime. The protocol is
+training-free, model-agnostic, and reproducible on modest hardware.
 \end{abstract}
 
 \section{Introduction}
@@ -75,13 +75,16 @@ between them.
 Our contributions are:
 \begin{itemize}
   \item \textbf{A diagnostic protocol} that decomposes OVD failure into localization,
-  semantic-confusion, and calibration axes, validated by synthetic controls and an
-  IoA-F1 anchor that reproduces prior benchmarks' model ordering.
-  \item \textbf{A cross-domain benchmark} over frozen state-of-the-art OVD detectors and
-  specialized domains, released as an open toolkit for arbitrary detector/domain pairs.
-  \item \textbf{Findings:} the dominant failure axis is domain-specific (aerial is
-  vocabulary-bound; medical is localization-bound), and semantic confusion increases with
-  detector capability --- neither observable from aggregate mAP.
+  semantic-confusion, and calibration axes, with a construct-validation design (synthetic
+  controls) and an IoA-F1 anchor that reproduces prior benchmarks' model ordering. To reduce
+  dependence on any single proposer, localization is measured both by an external
+  segmenter and by the detector's own class-agnostic boxes.
+  \item \textbf{A diagnostic study} across frozen OVD detectors and two specialized domains,
+  released as an open toolkit for arbitrary detector/domain pairs.
+  \item \textbf{Observations:} on the datasets studied, the dominant residual failure axis
+  differs (aerial retains localizability with a large vocabulary cost; medical is
+  localization-limited under multiple proposers) --- distinctions invisible to aggregate mAP.
+  We present these as hypotheses for larger-scale study, not domain-level conclusions.
 \end{itemize}
 
 \section{Related Work}
@@ -128,7 +131,11 @@ inference modes:
   L = 1 - \mathrm{AR}_{\mathrm{SAM}},
   \label{eq:L}
 \end{equation}
-so $L{\to}1$ means objects cannot be boxed at all, regardless of naming.
+so $L{\to}1$ means objects cannot be boxed at all, regardless of naming. To avoid dependence
+on a single proposer, we also report a detector-intrinsic variant $L_{\mathrm{det}}$ that
+strips labels from the detector's own oracle-mode boxes; agreement between $L$ and
+$L_{\mathrm{det}}$ indicates the localization reading is not an artifact of the external
+proposer.
 \emph{Semantic confusion} is the AP lost purely to enlarging the vocabulary from $P(x)$ to
 $V$:
 \begin{equation}
@@ -191,19 +198,27 @@ per domain.
 
 \subsection{Cross-domain findings}
 \label{sec:findings}
-Two observations dominate. \textbf{(1) The bottleneck axis is domain-specific.} On
-aerial imagery, models can localize (SAM recovers $14\%$ of objects, and prompting with
-the oracle vocabulary triples AP), so failure is driven by \emph{semantic confusion}:
-$S_{\mathrm{norm}}$ reaches $0.76$--$0.92$. On chest radiographs the picture inverts:
-$L{\approx}1.0$ --- even a class-agnostic SAM proposer boxes under $1\%$ of findings ---
-and providing oracle classes does not help, because \emph{localization}, not vocabulary,
-is the wall. Thus aerial is semantic-confusion bound while medical is localization bound,
-despite an identical protocol. \textbf{(2) Semantic confusion scales with model
-capability.} Within the aerial domain, $S_{\mathrm{norm}}$ rises monotonically from
-YOLO-World ($0.76$) to OWLv2 ($0.81$) to Grounding DINO ($0.92$): stronger detectors
-extract usable features but are increasingly swamped by the open vocabulary. These
-patterns are invisible to closed-set error tools (e.g.\ TIDE), which cannot isolate the
-vocabulary-induced axis.
+We frame these as descriptive observations on two datasets, not domain-level laws, and note
+throughout that absolute AP is low ($\le 0.08$ even under oracle prompting), so the
+decomposition characterizes the \emph{shape} of a failure regime rather than a
+near-solved task.
+
+\textbf{(1) The residual bottleneck differs by domain.} On aerial imagery, detectors retain
+some localizability ($\mathrm{AR}_{\mathrm{SAM}}{\approx}0.14$; the detector-intrinsic
+$\mathrm{AR}_{\mathrm{det}}$ agrees), and oracle prompting substantially raises the (still-low)
+AP, so a large share of the residual error is attributable to vocabulary. On chest
+radiographs, localizability is near zero under \emph{both} the external proposer and the
+detectors' own boxes ($L,L_{\mathrm{det}}{\approx}1$), and oracle prompting does not help ---
+localization, not vocabulary, is the limiting factor. That $L$ and $L_{\mathrm{det}}$ agree
+on medical is important: it indicates the reading is not merely an artifact of a
+natural-image proposer, though a domain-tuned proposer remains a valuable check
+(Sec.~\ref{sec:limitations}).
+
+\textbf{(2) A capability trend (hypothesis).} $S_{\mathrm{norm}}$ is numerically larger for
+higher-capacity detectors in our aerial results, but because it is a ratio on small
+$\mathrm{AP}_{\mathrm{oracle}}$ values and rests on three models, we report it only as a
+hypothesis for larger-scale study, not a conclusion. Regardless, these vocabulary-induced
+distinctions are invisible to closed-set error tools (e.g.\ TIDE).
 
 \subsection{Validation}
 \label{sec:validation}
