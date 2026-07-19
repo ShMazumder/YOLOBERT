@@ -247,6 +247,22 @@ vocabulary-bound, or vice versa.
   \label{fig:reliability}
 \end{figure}
 
+\subsection{Reproducibility}
+\label{sec:repro}
+We report the full protocol so results can be reproduced exactly. Detection quality is COCO
+mAP@[.50:.95] computed with \texttt{pycocotools}, restricted to the images actually evaluated
+(a subset run reports its own denominator). The anchor metric is IoA-F1 at IoA threshold
+$0.7$ and score threshold $0.25$, matching prior aerial benchmarks. Inference uses a low score
+threshold ($0.001$) so calibration observes the full confidence range; the fixed operating
+point for $C_{\mathrm{thr}}$ is $0.25$. Prompts are the benchmark's raw category names
+(Grounding DINO uses the lowercase period-separated convention). The default proposer is
+Ultralytics SAM (\texttt{mobile\_sam}, ``everything'' mode, $1024$px); YOLO-World runs at
+$800$px, OWLv2 and Grounding DINO at their processor defaults. Categories are mapped to a
+contiguous space internally and mapped back to dataset ids before scoring. Images that cannot
+be read are skipped and excluded from the denominator. Code, adapters, and the exact run
+scripts are released with the benchmark; uncertainty is estimated by image-level bootstrap
+($1000$ resamples).
+
 \subsection{Validation}
 \label{sec:validation}
 The IoA-F1 anchor reproduces the model ordering of prior aerial benchmarks (OWLv2 best),

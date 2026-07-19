@@ -1,6 +1,13 @@
 \begin{table*}[t]
   \centering
-  \caption{Cross-domain OVD failure fingerprint. AP is COCO mAP@[.5:.95]. $L{=}1{-}\mathrm{AR}_{\mathrm{SAM}}$ (domain-level localizability). $S_{\mathrm{norm}}$ is the fraction of achievable AP lost to vocabulary confusion; $^{\dagger}$ unstable when AP$_{\mathrm{oracle}}{\approx}0$. $C_{\mathrm{ece}}$ is expected calibration error.}
+  \caption{Cross-domain OVD failure fingerprint. Aerial: $n{=}1325$ evaluated images (LAE-80C,
+  80 classes); Medical: $n{=}200$ (VinDr-CXR, 14 classes); all detectors frozen, zero-shot.
+  AP is COCO mAP@[.50:.95]. $L{=}1{-}\mathrm{AR}_{\mathrm{SAM}}$ (external proposer);
+  $L_{\mathrm{det}}$ is the detector-intrinsic variant (no proposer).
+  $S_{\mathrm{norm}}$ is the fraction of achievable AP lost to vocabulary confusion;
+  $^{\dagger}$ unstable when AP$_{\mathrm{oracle}}{\approx}0$ and not interpreted.
+  $C_{\mathrm{ece}}$ is expected calibration error. Absolute AP is low throughout: the
+  decomposition characterizes the structure of a failure regime.}
   \label{tab:fingerprint}
   \begin{tabular}{ll cc c c c c}
     \toprule
