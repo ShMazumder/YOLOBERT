@@ -132,16 +132,21 @@ so $L{\to}1$ means objects cannot be boxed at all, regardless of naming.
 \emph{Semantic confusion} is the AP lost purely to enlarging the vocabulary from $P(x)$ to
 $V$:
 \begin{equation}
-  S = \mathrm{AP}_{\mathrm{oracle}} - \mathrm{AP}_{\mathrm{global}},\qquad
-  S_{\mathrm{norm}} = \frac{S}{\max(\mathrm{AP}_{\mathrm{oracle}},\,\varepsilon)}.
+  \begin{aligned}
+    S &= \mathrm{AP}_{\mathrm{oracle}} - \mathrm{AP}_{\mathrm{global}}, \\
+    S_{\mathrm{norm}} &= \frac{S}{\max(\mathrm{AP}_{\mathrm{oracle}},\,\varepsilon)}.
+  \end{aligned}
   \label{eq:S}
 \end{equation}
 $S_{\mathrm{norm}}$ is only meaningful when $\mathrm{AP}_{\mathrm{oracle}}$ is non-trivial;
 we flag it otherwise. \emph{Calibration} combines the expected calibration error of detection
 confidences with an operating-point term,
 \begin{equation}
-  C_{\mathrm{ece}} = \sum_b \tfrac{|B_b|}{D}\,\bigl|\mathrm{acc}(B_b)-\mathrm{conf}(B_b)\bigr|,
-  \quad C_{\mathrm{thr}} = F_1^{*} - F_1^{\mathrm{fixed}},
+  \begin{aligned}
+    C_{\mathrm{ece}} &= \sum_b \tfrac{|B_b|}{D}\,
+      \bigl|\mathrm{acc}(B_b)-\mathrm{conf}(B_b)\bigr|, \\
+    C_{\mathrm{thr}} &= F_1^{*} - F_1^{\mathrm{fixed}},
+  \end{aligned}
   \label{eq:C}
 \end{equation}
 where $B_b$ are confidence bins and $F_1^{*}$ the best achievable $F_1$ over thresholds.
