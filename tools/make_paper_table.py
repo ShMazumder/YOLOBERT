@@ -36,7 +36,7 @@ def main():
     domains = [d.split(":", 1) for d in args.domains]
 
     lines = [
-        r"\begin{table}[t]",
+        r"\begin{table*}[t]",   # span both columns in twocolumn layout
         r"  \centering",
         r"  \caption{Cross-domain OVD failure fingerprint. AP is COCO mAP@[.5:.95]. "
         r"$L{=}1{-}\mathrm{AR}_{\mathrm{SAM}}$ (domain-level localizability). "
@@ -68,7 +68,7 @@ def main():
         if di < len(domains) - 1:
             lines.append(r"    \midrule")
 
-    lines += [r"    \bottomrule", r"  \end{tabular}", r"\end{table}", ""]
+    lines += [r"    \bottomrule", r"  \end{tabular}", r"\end{table*}", ""]
 
     out = Path(args.out); out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("\n".join(lines))
