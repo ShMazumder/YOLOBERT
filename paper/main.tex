@@ -220,6 +220,20 @@ $\mathrm{AP}_{\mathrm{oracle}}$ values and rests on three models, we report it o
 hypothesis for larger-scale study, not a conclusion. Regardless, these vocabulary-induced
 distinctions are invisible to closed-set error tools (e.g.\ TIDE).
 
+\textbf{(3) Calibration is model-, not domain-, driven.} The reliability diagrams of
+\Cref{fig:reliability} show detections lie below the diagonal (overconfident), with Grounding
+DINO markedly worse ($C_{\mathrm{ece}}{=}0.084$) than YOLO-World ($0.009$). Unlike $L$ and
+$S$, the calibration axis separates \emph{models} rather than domains, indicating it captures
+a distinct, complementary failure mode: a detector may be well-calibrated yet localization- or
+vocabulary-bound, or vice versa.
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{figures/reliability_aerial}
+  \caption{Reliability diagrams (aerial). Empirical precision vs.\ mean confidence per model;
+  curves below the diagonal indicate overconfidence. ECE in legend.}
+  \label{fig:reliability}
+\end{figure}
+
 \subsection{Validation}
 \label{sec:validation}
 The IoA-F1 anchor reproduces the model ordering of prior aerial benchmarks (OWLv2 best),
