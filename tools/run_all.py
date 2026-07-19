@@ -35,22 +35,27 @@ def _run_modes(model, coco, img_ids, imgs_dir, names, name2catid, agnostic=False
     for k, img_id in enumerate(img_ids):
         info = coco.loadImgs(img_id)[0]
         path = os.path.join(imgs_dir, info["file_name"])
-        if agnostic:
-            for box, sc, _ in model.predict(path):
-                out["agnostic"].append({"image_id": img_id, "category_id": agn_catid,
-                                        "bbox": box, "score": sc})
-        else:
-            for box, sc, ci in model.predict(path, names):
-                out["global"].append({"image_id": img_id,
-                                      "category_id": name2catid[names[ci]],
-                                      "bbox": box, "score": sc})
-            present = sorted({a["category_id"] for a in coco.loadAnns(coco.getAnnIds(imgIds=img_id))})
-            pnames = [coco.loadCats([c])[0]["name"] for c in present]
-            if pnames:
-                for box, sc, ci in model.predict(path, pnames):
-                    out["oracle"].append({"image_id": img_id,
-                                         "category_id": name2catid[pnames[ci]],
-                                         "bbox": box, "score": sc})
+        if not os.path.exists(path):            # skip missing images (partial data)
+            continue
+        try:
+            if agnostic:
+                for box, sc, _ in model.predict(path):
+                    out["agnostic"].append({"image_id": img_id, "category_id": agn_catid,
+                                            "bbox": box, "score": sc})
+            else:
+                for box, sc, ci in model.predict(path, names):
+                    out["global"].append({"image_id": img_id,
+                                          "category_id": name2catid[names[ci]],
+                                          "bbox": box, "score": sc})
+                present = sorted({a["category_id"] for a in coco.loadAnns(coco.getAnnIds(imgIds=img_id))})
+                pnames = [coco.loadCats([c])[0]["name"] for c in present]
+                if pnames:
+                    for box, sc, ci in model.predict(path, pnames):
+                        out["oracle"].append({"image_id": img_id,
+                                             "category_id": name2catid[pnames[ci]],
+                                             "bbox": box, "score": sc})
+        except Exception as e:                  # one bad image never aborts the model
+            print(f"    [skip {info['file_name']}] {e}")
         if (k + 1) % 100 == 0:
             print(f"    {k+1}/{len(img_ids)}")
     return out
@@ -76,7 +81,12 @@ def main():
     cat_ids = sorted(coco.getCatIds())
     names = [c["name"] for c in coco.loadCats(cat_ids)]
     name2catid = {c["name"]: c["id"] for c in coco.loadCats(cat_ids)}
-    img_ids = sorted(coco.imgs.keys())
+    # keep only images that exist on disk (data may be partial)
+    img_ids = [i for i in sorted(coco.imgs.keys())
+               if os.path.exists(os.path.join(args.imgs, coco.loadImgs(i)[0]["file_name"]))]
+    missing = len(coco.imgs) - len(img_ids)
+    if missing:
+        print(f"[warn] {missing}/{len(coco.imgs)} images missing on disk — running on {len(img_ids)}")
     if args.limit:
         img_ids = img_ids[:args.limit]
     out_dir = Path(args.out); out_dir.mkdir(parents=True, exist_ok=True)
