@@ -305,30 +305,61 @@ only the temperature control for the reason given above.
 \section{Limitations}
 \label{sec:limitations}
 Our study is deliberately scoped to what can be measured rigorously on modest hardware, and
-several limitations follow. \textbf{Scale.} We report two domains and three detectors on
-evaluation subsets; absolute numbers will shift with full splits and additional models,
-though the qualitative axes are stable across the sizes we tested. \textbf{Localization
-reference.} A single natural-image SAM proposer would conflate ``intrinsically hard to
-localize'' with ``hard for SAM.'' We therefore triangulate localization with three
-references: the SAM proposer ($L$), the detector's own class-agnostic boxes
-($L_{\mathrm{det}}$, assumption-free), and an optional domain-trained proposer plugged in
-through the same interface. On medical, $L$ and $L_{\mathrm{det}}$ agree at ${\approx}1$,
-so the reading is not merely a SAM artifact; a domain proposer that nonetheless recovered
-findings would localize the blame to SAM, and our toolkit supports that check directly. \textbf{The $S$ axis.} $S_{\mathrm{norm}}$ is a ratio on
-$\mathrm{AP}_{\mathrm{oracle}}$ and is undefined when localization collapses; it therefore
-supports a strong \emph{within-aerial} conclusion (confusion grows with capability) but not
-a two-domain comparison, which our analysis rests instead on the localization axis.
+several limitations follow.
+
+\textbf{The medical domain is a degenerate regime.} This is the most consequential caveat.
+On VinDr-CXR, AP is ${\approx}0$ under \emph{every} prompting mode --- global, oracle, and
+agnostic alike. When all quantities collapse together, the decomposition cannot attribute
+error \emph{between} axes; it can only report that localization and semantics fail jointly.
+The discriminative value of the fingerprint --- its ability to say ``this domain is
+vocabulary-bound, that one is not'' --- is therefore demonstrated on aerial imagery, while
+medical functions as a contrasting endpoint rather than as a second case of successful
+decomposition. A reader should not conclude that we have separated three axes in two
+domains; we have separated them in one and shown a second where the separation degenerates.
+Establishing the protocol's discriminative power properly requires domains of intermediate
+difficulty, where AP is low but non-vanishing.
+
+\textbf{Localization reference.} A single natural-image SAM proposer conflates
+``intrinsically hard to localize'' with ``hard for SAM,'' and our medical results show this
+is not hypothetical: SAM recovers $0.24\%$ of findings while the detectors' own boxes
+recover $5.7\%$, a $23{\times}$ gap. We therefore report the proposer-independent
+$L_{\mathrm{det}}$ as primary in that domain and treat the SAM-based $L$ as a lower bound.
+The strongest available check --- a chest-radiograph-trained proposer plugged in through the
+same interface --- is implemented in the released toolkit but not yet run for want of a
+suitable public weight; until it is, the \emph{magnitude} of the medical localization gap
+should be read as bounded rather than pinned down.
+
+\textbf{The $S$ axis.} $S_{\mathrm{norm}}$ is a ratio on $\mathrm{AP}_{\mathrm{oracle}}$ and
+is unstable when localization collapses; the medical values are reported for completeness
+but are not interpreted. It supports a \emph{within-aerial} reading only. Moreover, our
+vocabulary control establishes that $S$ responds to vocabulary size, but not yet that it
+responds specifically to semantic confusability (Sec.~\ref{sec:validation}); the axis's
+name is thus, at present, better justified by the qualitative evidence
+(\Cref{fig:qual}) than by the control.
+
+\textbf{Scale.} Two domains, three detectors. The aerial split is evaluated on the $1325$
+images retrievable at run time of $3592$ annotated, so aerial numbers are subset estimates;
+medical uses the full $4394$. Absolute values will shift with complete splits and additional
+detectors, and two datasets cannot support claims about ``aerial'' or ``medical'' imagery in
+general --- we describe two benchmarks, not two domains.
+
 \textbf{Vocabulary construction.} We use each benchmark's native taxonomy; alternative
-groupings or prompt templates would change $S$, a sensitivity we leave to future work.
+groupings or prompt templates would change $S$. Radiological class names
+(e.g.\ ``ILD'', ``Pulmonary fibrosis'') are also far from the caption distributions these
+detectors were trained on, so the medical result partly measures text-encoder coverage
+rather than detection capability per se --- a confound we cannot separate without
+prompt-engineering ablations we leave to future work.
 
 \section{Conclusion}
 \label{sec:conc}
 Aggregate mAP tells us that open-vocabulary detectors fail in specialized domains but not
 why. OVD-Diagnose replaces that single number with an interpretable, training-free
 fingerprint that separates localization, semantic-confusion, and calibration error, and it
-reveals that the dominant failure mode is domain-specific: aerial detection is bottlenecked
-by vocabulary confusion, whereas medical detection fails at localization outright, making
-vocabulary irrelevant. Because the protocol is model-agnostic and runs inference-only, it
+reveals that the dominant failure mode is domain-specific: on aerial imagery a large share
+of the residual error is attributable to vocabulary confusion, whereas on chest radiographs
+localization fails first and vocabulary never becomes the binding constraint. We show the
+decomposition doing real work in the first setting and degenerating in the second, and we
+report both. Because the protocol is model-agnostic and runs inference-only, it
 scales to new detectors and domains at negligible cost and turns ``it doesn't transfer''
 into an actionable diagnosis of which remedy --- better localization, vocabulary
 disambiguation, or recalibration --- a given deployment actually needs. We release the
