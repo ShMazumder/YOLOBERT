@@ -204,15 +204,25 @@ decomposition characterizes the \emph{shape} of a failure regime rather than a
 near-solved task.
 
 \textbf{(1) The residual bottleneck differs by domain.} On aerial imagery, detectors retain
-some localizability ($\mathrm{AR}_{\mathrm{SAM}}{\approx}0.14$; the detector-intrinsic
-$\mathrm{AR}_{\mathrm{det}}$ agrees), and oracle prompting substantially raises the (still-low)
-AP, so a large share of the residual error is attributable to vocabulary. On chest
-radiographs, localizability is near zero under \emph{both} the external proposer and the
-detectors' own boxes ($L,L_{\mathrm{det}}{\approx}1$), and oracle prompting does not help ---
-localization, not vocabulary, is the limiting factor. That $L$ and $L_{\mathrm{det}}$ agree
-on medical is important: it indicates the reading is not merely an artifact of a
-natural-image proposer, though a domain-tuned proposer remains a valuable check
-(Sec.~\ref{sec:limitations}).
+some localizability ($\mathrm{AR}_{\mathrm{SAM}}{=}0.138$, and the detector-intrinsic
+$\mathrm{AR}_{\mathrm{det}}$ agrees to within $0.10$ for OWLv2 and Grounding DINO), and
+oracle prompting raises the (still-low) AP by ${\approx}5{\times}$ for OWLv2
+($0.015{\to}0.079$), so a large share of the residual error is attributable to vocabulary.
+On chest radiographs, oracle prompting yields no usable gain
+($0.0002{\to}0.0012$, both ${\approx}0$) and localizability is low under every reference we
+tried --- localization, not vocabulary, is the limiting factor.
+
+Here the two localization estimates \emph{diverge}, and the direction matters. SAM proposes
+almost nothing on radiographs ($\mathrm{AR}_{\mathrm{SAM}}{=}0.0024$), whereas the detectors'
+own class-agnostic boxes recover $23{\times}$ more ground truth
+($\mathrm{AR}_{\mathrm{det}}{=}0.057$ for OWLv2). A natural-image proposer is therefore
+demonstrably unreliable in this domain, and the SAM-based $L$ overstates the severity of the
+localization gap. The qualitative conclusion nevertheless survives the correction: even the
+proposer-independent estimate leaves $L_{\mathrm{det}}{=}0.94$, i.e.\ $94\%$ of findings
+unlocalized before any label is assigned. We accordingly report $L_{\mathrm{det}}$ as the
+primary localization figure on medical and treat the SAM-based $L$ as a lower bound on
+localizability there. A domain-trained proposer would tighten this estimate further and is
+the check we most want (Sec.~\ref{sec:limitations}).
 
 \Cref{fig:qual} shows representative cases: on aerial imagery detections often localize a
 GT object but assign a wrong (semantically adjacent) class, whereas on chest radiographs GT
@@ -266,10 +276,31 @@ scripts are released with the benchmark; uncertainty is estimated by image-level
 \subsection{Validation}
 \label{sec:validation}
 The IoA-F1 anchor reproduces the model ordering of prior aerial benchmarks (OWLv2 best),
-confirming the harness against external results. To further establish construct validity, we
-propose the synthetic-control protocol of Sec.~\ref{sec:method} --- perturbing vocabulary,
-input sharpness, and logit temperature to confirm each axis responds only to its intended
-cause; a full sensitivity study is left to future work.
+confirming the harness against external results. Bootstrap CIs on the anchor
+(\Cref{tab:fingerprint}) do not overlap across the three detectors in either domain, so the
+reported ordering is not attributable to sampling noise.
+
+We then run the synthetic controls of Sec.~\ref{sec:method}, each perturbing one factor and
+checking that only its intended axis moves.
+\textbf{Temperature.} Rescaling logits over $T{\in}[0.5,5]$ drives $C_{\mathrm{ece}}$ from
+$0.003$ to $0.287$ on aerial ($0.001{\to}0.261$ on medical) while AP is invariant to four
+decimal places ($0.0150$ at every $T$; $0.0002$ on medical). The calibration axis is thus
+cleanly separable from the AP-derived axes --- the sharpest of our validity results, and it
+replicates in both domains.
+\textbf{Vocabulary.} Adding random distractors to the prompt raises $S$ monotonically on
+aerial ($0.000, 0.037, 0.070, 0.103, 0.125$ at $0, 5, 20, 40, 79$ distractors), confirming
+$S$ tracks vocabulary pressure.
+\textbf{Blur.} Gaussian blur at $\sigma{\in}[0,8]$ raises $L$ monotonically on aerial
+($0.611{\to}0.796$) via a text-independent perturbation, confirming $L$ responds to image
+degradation rather than prompting. The same control on medical is uninformative: $L$ begins
+at $0.996$ and can move at most $0.004$, a floor effect we report as inconclusive rather
+than as a pass.
+
+Two gaps remain. We do not yet report the semantically-ranked variant of the vocabulary
+control, which would distinguish ``$S$ grows with vocabulary \emph{size}'' from ``$S$ grows
+with vocabulary \emph{confusability}''; only the former is presently established. And the
+controls are demonstrated on aerial, where the metrics are non-degenerate; medical supports
+only the temperature control for the reason given above.
 
 \section{Limitations}
 \label{sec:limitations}
