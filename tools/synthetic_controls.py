@@ -80,17 +80,23 @@ def _semantic_ranker(all_names):
     """
     import numpy as np
     import torch
-    from transformers import CLIPModel, CLIPTokenizer
+    from transformers import CLIPTextModelWithProjection, CLIPTokenizer
     name = "openai/clip-vit-base-patch32"
     tok = CLIPTokenizer.from_pretrained(name)
-    mod = CLIPModel.from_pretrained(name).eval()
+    mod = CLIPTextModelWithProjection.from_pretrained(name).eval()
     with torch.no_grad():
         inp = tok([f"a photo of a {n}" for n in all_names],
                   padding=True, truncation=True, return_tensors="pt")
-        feats = mod.get_text_features(**inp)
+        out = mod(**inp)
+        # transformers versions differ: tensor, .text_embeds, or .pooler_output
+        feats = out if torch.is_tensor(out) else getattr(out, "text_embeds", None)
+        if feats is None:
+            feats = out.pooler_output
         feats = torch.nn.functional.normalize(feats, dim=-1).cpu().numpy()
+    if feats.ndim != 2 or feats.shape[0] != len(all_names):
+        raise RuntimeError(f"bad CLIP embedding shape {feats.shape} for {len(all_names)} names")
     emb = dict(zip(all_names, feats))
-    print(f"[semantic] CLIP text embeddings for {len(all_names)} classes")
+    print(f"[semantic] CLIP text embeddings: {feats.shape[0]} classes x {feats.shape[1]} dims")
 
     def rank(pnames, others, k):
         P = np.stack([emb[n] for n in pnames])          # (p, d)
@@ -115,6 +121,7 @@ def vocab_control(ann, imgs, model, extra_sizes, out_csv, limit=0, device=None,
     ranker = _semantic_ranker(all_names) if distractor == "semantic" else None
     rng = random.Random(0)
     rows = []
+    shown = False          # print one distractor sample so random vs semantic is auditable
     for k in extra_sizes:
         results, oracle_results = [], []
         for img_id in img_ids:
@@ -129,6 +136,9 @@ def vocab_control(ann, imgs, model, extra_sizes, out_csv, limit=0, device=None,
                 distract = ranker(pnames, others, k)            # semantically nearest
             else:
                 distract = rng.sample(others, min(k, len(others)))  # random
+            if not shown and k > 0:
+                print(f"[{distractor}] present={pnames} -> distractors={distract[:5]}")
+                shown = True
             vocab = pnames + distract
             for box, sc, ci in model.predict(path, vocab):
                 nm = vocab[ci]
